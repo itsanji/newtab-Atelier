@@ -82,6 +82,14 @@ describe('fireDue', () => {
     expect(await fireDue(db, NOW)).toEqual([]);
   });
 
+  test('concurrent calls notify exactly once', async () => {
+    const a = await todo('once');
+    await setReminder(db, a.id, past);
+    const results = await Promise.all([fireDue(db, NOW), fireDue(db, NOW)]);
+    expect(results.flat()).toEqual([a.id]);
+    expect(fake.notifications.create).toHaveBeenCalledTimes(1);
+  });
+
   test('missed reminder fires on startup exactly once', async () => {
     const a = await todo('missed');
     await setReminder(db, a.id, past);

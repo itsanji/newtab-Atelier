@@ -72,6 +72,24 @@ describe('ReminderPicker', () => {
     expect(await db.reminders.count()).toBe(0);
   });
 
+  test('rejects an empty custom time without closing or throwing', async () => {
+    const user = userEvent.setup();
+    await renderPicker();
+    await user.click(screen.getByRole('button', { name: 'Set reminder' }));
+    await user.clear(screen.getByLabelText('Custom time'));
+    await user.click(screen.getByRole('button', { name: 'Set time' }));
+    expect(await screen.findByText('Pick a date and time')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Reminder' })).toBeInTheDocument();
+    expect(await db.reminders.count()).toBe(0);
+  });
+
+  test('focuses the first preset on open', async () => {
+    const user = userEvent.setup();
+    await renderPicker();
+    await user.click(screen.getByRole('button', { name: 'Set reminder' }));
+    expect(screen.getByRole('button', { name: 'Later today (18:00)' })).toHaveFocus();
+  });
+
   test('Remove reminder appears when set and tombstones it', async () => {
     const user = userEvent.setup();
     const item = await renderPicker(true);

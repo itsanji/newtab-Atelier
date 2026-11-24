@@ -28,18 +28,20 @@ export function ReminderPicker({
 
   useEffect(() => {
     if (!open) return;
+    root.current?.querySelector<HTMLButtonElement>('.atl-reminder-pop button')?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      e.stopPropagation();
       setOpen(false);
       trigger.current?.focus();
     };
     const onDown = (e: MouseEvent) => {
       if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
     document.addEventListener('mousedown', onDown);
     return () => {
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', onKey, true);
       document.removeEventListener('mousedown', onDown);
     };
   }, [open]);
@@ -51,14 +53,19 @@ export function ReminderPicker({
   };
 
   const choose = async (at: Date) => {
+    if (Number.isNaN(at.getTime())) return setError('Pick a date and time');
     if (at.getTime() <= now().getTime()) return setError('Pick a time in the future');
-    close();
-    if (await run(setReminder(db, itemId, at.toISOString()))) announceChange();
+    if (await run(setReminder(db, itemId, at.toISOString()))) {
+      close();
+      announceChange();
+    }
   };
 
   const remove = async () => {
-    close();
-    if (await run(clearReminder(db, itemId))) announceChange();
+    if (await run(clearReminder(db, itemId))) {
+      close();
+      announceChange();
+    }
   };
 
   return (
