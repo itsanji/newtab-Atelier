@@ -19,3 +19,13 @@ if (proto) {
     this.dispatchEvent(new Event('close'));
   };
 }
+
+// ProseMirror (TipTap) measures layout; jsdom has none, so stub the geometry APIs it calls.
+const emptyRect = () => ({ x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, toJSON: () => ({}) }) as DOMRect;
+const noRects = () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as unknown as DOMRectList;
+if (typeof Range !== 'undefined') {
+  Range.prototype.getBoundingClientRect ??= emptyRect;
+  Range.prototype.getClientRects ??= noRects;
+}
+if (typeof Element !== 'undefined') Element.prototype.getClientRects ??= noRects;
+if (typeof document !== 'undefined') document.elementFromPoint ??= () => null;

@@ -7,6 +7,7 @@ import { Menu } from '../ui/components/Menu';
 import { Icon } from '../ui/components/Icon';
 import { LinkForm } from './LinkForm';
 import { useRun } from './Notice';
+import { removeAndRefocus } from './removeItem';
 import { Dialog } from '../ui/components/Dialog';
 import { domainOf, normalizeUrl } from './url';
 
@@ -28,14 +29,7 @@ export function ItemRow({ item }: { item: Item }) {
   const domain = domainOf(url);
   const tone = TONES[hash(item.id) % 4];
 
-  // The row unmounts on delete, so hand focus to the next row, or else the column heading.
-  const remove = async () => {
-    const el = row.current;
-    const next = el?.nextElementSibling;
-    const target = (next?.classList.contains('atl-item') ? next.querySelector<HTMLElement>('a') : null)
-      ?? el?.closest('section')?.querySelector<HTMLElement>('.atl-title-btn');
-    if (await run(deleteItem(db, item.id))) target?.focus();
-  };
+  const remove = () => removeAndRefocus(row.current, () => run(deleteItem(db, item.id)));
 
   return (
     <div className="atl-item" ref={row}>

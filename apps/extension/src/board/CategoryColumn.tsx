@@ -11,6 +11,8 @@ import { Icon } from '../ui/components/Icon';
 import { useRun } from './Notice';
 import { AddItemMenu } from './AddItemMenu';
 import { ItemRow } from './ItemRow';
+import { NoteItem } from './NoteItem';
+import { TodoItem } from './TodoItem';
 
 export function CategoryColumn({ category, onOpenAll }: { category: Category; onOpenAll?: () => void }) {
   const db = useDb();
@@ -18,6 +20,7 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
   const section = useRef<HTMLElement>(null);
   const items = useLiveQuery(() => liveItems(db, category.id), [db, category.id]) ?? [];
   const [renaming, setRenaming] = useState(false);
+  const [freshNote, setFreshNote] = useState<string | null>(null);
 
   const startRename = () => setRenaming(true);
 
@@ -58,9 +61,14 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
           ]}
         />
       </div>
-      {items.map((item) => (item.kind === 'link' ? <ItemRow key={item.id} item={item} /> : null))}
+      {items.map((item) => {
+        if (item.kind === 'link') return <ItemRow key={item.id} item={item} />;
+        if (item.kind === 'note') return <NoteItem key={item.id} item={item} autoFocus={item.id === freshNote} />;
+        if (item.kind === 'todo') return <TodoItem key={item.id} item={item} />;
+        return null;
+      })}
       <div className="atl-column-foot">
-        <AddItemMenu categoryId={category.id} />
+        <AddItemMenu categoryId={category.id} onCreated={setFreshNote} />
         <button type="button" className="atl-textlink" onClick={() => onOpenAll?.()}>Open all</button>
       </div>
     </section>
