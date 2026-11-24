@@ -51,14 +51,25 @@ const SCHEMAS = {
   reminders: reminderSchema,
 } as const;
 
-/** Postgres text and jsonb cannot hold U+0000; strip it from every string and key before validating. */
+/**
+ * Postgres text and jsonb cannot hold U+0000, and jsonb rejects lone UTF-16 surrogates (22P02).
+ * Strip NUL and replace lone surrogates with U+FFFD in every string and key before validating.
+ */
+const clean = (s: string): string => (s.includes('\u0000') ? s.replaceAll('\u0000', '') : s).toWellFormed();
+
 function stripNul(value: unknown): unknown {
-  if (typeof value === 'string') return value.includes('\u0000') ? value.replaceAll('\u0000', '') : value;
+  if (typeof value === 'string') return clean(value);
   if (Array.isArray(value)) return value.map(stripNul);
   if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k.replaceAll('\u0000', ''), stripNul(v)]));
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [clean(k), stripNul(v)]));
   }
   return value;
+}
+
+/** SQLSTATE class 22: the row's data is bad (invalid text representation, datetime out of range, ...). */
+function isDataError(err: unknown): boolean {
+  const code = (err as { errno?: unknown; code?: unknown } | null)?.errno ?? (err as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && code.startsWith('22');
 }
 
 interface Ctx {
@@ -89,7 +100,16 @@ export async function applyPush(
       const raw = change.row as { id?: unknown } | null;
       const id = raw && typeof raw === 'object' && typeof raw.id === 'string' ? raw.id : '';
       const parsed = SCHEMAS[change.table].safeParse(stripNul(change.row));
-      const outcome = parsed.success ? await apply(ctx, change.table, parsed.data) : rejected('invalid');
+      let outcome: Outcome = rejected('invalid');
+      if (parsed.success) {
+        const data = parsed.data;
+        try {
+          // Own savepoint: a data error undoes only this row and leaves the transaction (and lock) usable.
+          outcome = await tx.savepoint((sp: SQL) => apply({ ...ctx, tx: sp }, change.table, data));
+        } catch (err) {
+          if (!isDataError(err)) throw err;
+        }
+      }
       if (change.table === 'reminders' && outcome.status !== 'rejected') remindersChanged = true;
       results[index] = { table: change.table, id, ...outcome };
     }

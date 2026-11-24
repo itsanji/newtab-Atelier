@@ -259,6 +259,44 @@ describe('sync', () => {
     });
   });
 
+  test('lone surrogate in tabGroup title/body is applied well-formed', async () => {
+    ctx = await makeApp();
+    const u = await signUp(ctx.app, 'sur@example.com');
+    const w = ws();
+    const c = cat(w.id, { tabGroup: { title: 'Gr\ud800oup', color: 'blue' } });
+    const i = item(c.id, { title: 'T\udc00itle', body: { 'k\ud800ey': ['a\ud83db', { nested: '\udc00' }] } });
+    const results = await push(u.token, [
+      { table: 'workspaces', row: w },
+      { table: 'categories', row: c },
+      { table: 'items', row: i },
+    ]);
+    expect(results.map((r) => r.status)).toEqual(['applied', 'applied', 'applied']);
+    const p = await pull(u.token, 0);
+    expect(p.categories[0]).toMatchObject({ tabGroup: { title: 'Gr\ufffdoup', color: 'blue' } });
+    expect(p.items[0]).toMatchObject({ title: 'T\ufffditle', body: { 'k\ufffdey': ['a\ufffdb', { nested: '\ufffd' }] } });
+  });
+
+  test('a row Postgres rejects is rejected alone and the rest applies', async () => {
+    ctx = await makeApp();
+    const u = await signUp(ctx.app, 'bad@example.com');
+    const w = ws();
+    const c = cat(w.id);
+    const good = item(c.id, { title: 'Good' });
+    const bad = item(c.id, { title: 'Bad', createdAt: '0000-01-01T00:00:00.000Z' });
+    const good2 = item(c.id, { title: 'Good 2' });
+    const results = await push(u.token, [
+      { table: 'workspaces', row: w },
+      { table: 'categories', row: c },
+      { table: 'items', row: good },
+      { table: 'items', row: bad },
+      { table: 'items', row: good2 },
+    ]);
+    expect(results.map((r) => r.status)).toEqual(['applied', 'applied', 'applied', 'rejected', 'applied']);
+    expect(results[3]).toMatchObject({ id: bad.id, reason: 'invalid' });
+    const p = await pull(u.token, 0);
+    expect(ids(p.items)).toEqual(ids([good, good2]));
+  });
+
   test('push restores a deleted parent', async () => {
     ctx = await makeApp();
     const a = await seed('a@example.com');

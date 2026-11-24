@@ -249,9 +249,20 @@ describe('google sign-in', () => {
     expect((await ctx.sql`select count(*)::int as n from users`)[0].n).toBe(0);
   });
 
-  test('google routes 404 when not configured; expired exchange code rejected', async () => {
+  test('google routes 404 when not configured', async () => {
     ctx = await makeApp();
     expect((await ctx.app.request(`/auth/google/start?redirect_uri=${encodeURIComponent(EXT)}&state=s`)).status).toBe(404);
     expect((await json('/api/auth/google/exchange', { code: 'x' })).status).toBe(404);
+  });
+
+  test('expired exchange code is rejected', async () => {
+    let clock = new Date('2026-01-01T00:00:00Z');
+    const google = startFakeGoogle({ email: 'late@example.com', email_verified: true });
+    ctx = await makeApp({ config: { google }, now: () => clock });
+    const state = (await googleStart()).searchParams.get('state')!;
+    const cb = await ctx.app.request(`/auth/google/callback?code=good-code&state=${state}`);
+    const code = new URL(cb.headers.get('location')!).searchParams.get('code')!;
+    clock = new Date(clock.getTime() + 61 * 1000);
+    expect((await json('/api/auth/google/exchange', { code })).status).toBe(400);
   });
 });

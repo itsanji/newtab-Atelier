@@ -46,7 +46,10 @@ Set these in `.env` and restart with `docker compose up -d`:
 ```
 PUBLIC_URL=https://atelier.example.com
 TRUST_PROXY=true
+BIND_ADDRESS=127.0.0.1
 ```
+
+`BIND_ADDRESS=127.0.0.1` is required whenever `TRUST_PROXY=true`. By default Docker publishes the port on every interface (`0.0.0.0`), and it does so ahead of host firewalls such as ufw. Anyone could then reach the server directly, bypassing Caddy, and send a forged `X-Forwarded-For` to dodge the login rate limit. Binding to `127.0.0.1` leaves the proxy on the same host as the only way in.
 
 `TRUST_PROXY=true` makes the login rate limit use the client address Caddy puts last in `X-Forwarded-For`. Set it only when a proxy you control sits in front, and never when the port is reachable directly: a client could then pick its own address and dodge the limit. With the default `false` the limit uses the connection's address, which behind a proxy is the proxy itself, so all users share one limit. nginx works the same way; make sure it sets `X-Forwarded-For` (`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`) and that WebSocket upgrades are passed through for live updates.
 
@@ -74,7 +77,7 @@ Use `smtp://` with port 587 for STARTTLS. Without them, only password and Google
 - Password sign-ups do not verify the email address. Anyone who can reach the server can register any address with a password.
 - Workspace invitations to an email without an account attach to whoever signs up with that email.
 - When someone later signs in with an email link or Google for an address that was registered with a password, the password and all of that account's sessions are removed, so a pre-registered account cannot be kept by the person who created it. Until then, treat password accounts as unverified.
-- Once you have created your accounts, set `ALLOW_SIGNUP=false` and restart. Password sign-up is then refused and email links and Google create no new accounts; existing users and invited emails can still sign in. Or configure SMTP and use email links.
+- Once you have created your accounts, set `ALLOW_SIGNUP=false` and restart. Password sign-up is then refused and email links and Google create no new accounts; existing users can still sign in. Invited emails can only sign in if SMTP (email link) or Google is configured, since password sign-up is refused. Configure SMTP or Google before inviting people to a closed server.
 - Run the server behind HTTPS, and keep `.env` private: it holds the session secret and database password.
 
 ## Backups
@@ -103,4 +106,4 @@ Migrations run automatically when the new server starts. Take a backup first. `d
 
 ## Environment reference
 
-See `.env.example` for every variable: `PUBLIC_URL`, `POSTGRES_PASSWORD`, `SESSION_SECRET`, `PORT`, `TRUST_PROXY`, `ALLOW_SIGNUP`, `SMTP_URL`, `SMTP_FROM`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
+See `.env.example` for every variable: `PUBLIC_URL`, `POSTGRES_PASSWORD`, `SESSION_SECRET`, `PORT`, `BIND_ADDRESS`, `TRUST_PROXY`, `ALLOW_SIGNUP`, `SMTP_URL`, `SMTP_FROM`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
