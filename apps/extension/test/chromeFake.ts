@@ -34,6 +34,32 @@ export interface FakeTab {
   favIconUrl?: string;
 }
 
+/** A minimal in-memory `chrome.storage` area (used for `session`). */
+function createArea(name: string, onChanged: FakeEvent) {
+  const data: Record<string, unknown> = {};
+  return {
+    get: vi.fn(async (keys?: string | string[] | null) => {
+      if (keys == null) return { ...data };
+      const list = typeof keys === 'string' ? [keys] : keys;
+      return Object.fromEntries(list.filter((k) => k in data).map((k) => [k, data[k]]));
+    }),
+    set: vi.fn(async (items: Record<string, unknown>) => {
+      const changes: Record<string, { oldValue?: unknown; newValue: unknown }> = {};
+      for (const [k, v] of Object.entries(items)) changes[k] = { oldValue: data[k], newValue: v };
+      Object.assign(data, items);
+      onChanged.dispatch(changes, name);
+    }),
+    remove: vi.fn(async (keys: string | string[]) => {
+      const changes: Record<string, { oldValue?: unknown }> = {};
+      for (const k of typeof keys === 'string' ? [keys] : keys) {
+        if (k in data) changes[k] = { oldValue: data[k] };
+        delete data[k];
+      }
+      onChanged.dispatch(changes, name);
+    }),
+  };
+}
+
 export function createChromeFake() {
   let nextTabId = 1;
   let nextWindowId = 1;
@@ -45,6 +71,7 @@ export function createChromeFake() {
   const inWindow = (windowId: number) => [...tabs.values()].filter((t) => t.windowId === windowId);
   const currentWindowId = () => [...windows.keys()][0] ?? addWindow().id;
   const store: Record<string, unknown> = {};
+  const storageChanged = createEvent<(changes: Record<string, unknown>, area: string) => void>();
   const alarmMap = new Map<string, { name: string; scheduledTime: number; periodInMinutes?: number }>();
 
   const addWindow = () => {
@@ -176,13 +203,19 @@ export function createChromeFake() {
           fake.storage.onChanged.dispatch(changes, 'local');
         }),
         remove: vi.fn(async (keys: string | string[]) => {
-          for (const k of typeof keys === 'string' ? [keys] : keys) delete store[k];
+          const changes: Record<string, { oldValue?: unknown }> = {};
+          for (const k of typeof keys === 'string' ? [keys] : keys) {
+            if (k in store) changes[k] = { oldValue: store[k] };
+            delete store[k];
+          }
+          fake.storage.onChanged.dispatch(changes, 'local');
         }),
         clear: vi.fn(async () => {
           for (const k of Object.keys(store)) delete store[k];
         }),
       },
-      onChanged: createEvent<(changes: Record<string, unknown>, area: string) => void>(),
+      session: createArea('session', storageChanged),
+      onChanged: storageChanged,
     },
     alarms: {
       onAlarm: createEvent<(alarm: { name: string }) => void>(),
@@ -209,6 +242,14 @@ export function createChromeFake() {
     },
     commands: {
       onCommand: createEvent<(command: string, tab?: FakeTab) => void>(),
+    },
+    permissions: {
+      contains: vi.fn(async (_perm: { origins?: string[] }) => true),
+      request: vi.fn(async (_perm: { origins?: string[] }) => true),
+    },
+    identity: {
+      getRedirectURL: (path = '') => `https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/${path}`,
+      launchWebAuthFlow: vi.fn(async (_details: { url: string; interactive?: boolean }): Promise<string | undefined> => undefined),
     },
     runtime: {
       onMessage: createEvent<(message: unknown, sender: object, sendResponse: Listener) => void>(),

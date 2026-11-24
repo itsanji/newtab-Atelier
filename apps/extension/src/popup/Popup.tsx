@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Category, Workspace } from '@atelier/core';
-import { openDb, type AtelierDB } from '../data/db';
+import type { AtelierDB } from '../data/db';
 import { DbProvider, useDb } from '../data/DbContext';
+import { ActiveDbProvider } from '../account/activeDb';
 import { getMeta, liveCategories, liveWorkspaces, setMeta } from '../data/queries';
 import { createCategory, createItem } from '../data/repo';
 import { useTheme } from '../data/settings';
@@ -9,13 +10,13 @@ import { ensureSeed } from '../data/seed';
 import { LAST_CATEGORY_KEY } from '../data/target';
 import { faviconUrl } from '../chrome/favicon';
 import { isSavableTab, listWindowTabs, saveAll as saveAllTabs } from '../chrome/tabs';
+import { editableWorkspaces } from '../data/role';
+import { syncNow } from '../sync/localWrites';
 import { NoticeProvider, useRun } from '../board/Notice';
 import { Button } from '../ui/components/Button';
 import { Dabs } from '../ui/components/Dabs';
 import { Field } from '../ui/components/Field';
 import { Icon } from '../ui/components/Icon';
-
-let defaultDb: AtelierDB | undefined;
 
 interface Loaded {
   tab: chrome.tabs.Tab | undefined;
@@ -34,17 +35,20 @@ async function currentTab(): Promise<chrome.tabs.Tab | undefined> {
 
 async function load(db: AtelierDB): Promise<Loaded> {
   await ensureSeed(db);
-  const workspaces = await liveWorkspaces(db);
+  const all = await liveWorkspaces(db);
+  // Viewer workspaces are never save targets; if every workspace is read-only the popup can't save.
+  const editable = await editableWorkspaces(db, all);
   const storedWs = await getMeta<string>(db, 'selectedWorkspaceId');
-  const workspace = workspaces.find((w) => w.id === storedWs) ?? workspaces[0]!;
-  const categories = await liveCategories(db, workspace.id);
+  const workspace = editable.find((w) => w.id === storedWs) ?? editable[0] ?? all[0]!;
+  const canSave = editable.some((w) => w.id === workspace.id);
+  const categories = canSave ? await liveCategories(db, workspace.id) : [];
   const last = await getMeta<string>(db, LAST_CATEGORY_KEY);
   const tab = await currentTab();
   const stored = (await chrome.storage.local.get('closeAfterSave')).closeAfterSave;
   return {
     tab, workspace, categories,
     selectedId: categories.find((c) => c.id === last)?.id ?? categories[0]?.id,
-    windowTabs: (await listWindowTabs(tab?.windowId)).length,
+    windowTabs: canSave ? (await listWindowTabs(tab?.windowId)).length : 0,
     closeAfterSave: typeof stored === 'boolean' ? stored : true,
   };
 }
@@ -81,6 +85,7 @@ function PopupBody({ initial }: { initial: Loaded }) {
     })());
     setBusy(false);
     if (!ok) return;
+    syncNow(); // not debounced: the popup may close right away
     if (closeAfterSave) window.close();
     else setSaved(`Saved to ${selected.name}`);
   };
@@ -92,6 +97,7 @@ function PopupBody({ initial }: { initial: Loaded }) {
     const ok = await run(saveAllTabs(db, workspace.id, { windowId: tab?.windowId, close: closeAfterSave }).then((r) => { count = r.saved; }));
     setBusy(false);
     if (!ok) return;
+    syncNow(); // not debounced: the popup may close right away
     if (closeAfterSave) window.close();
     else setSaved(`Saved ${count} ${count === 1 ? 'tab' : 'tabs'} to ${workspace.name}`);
   };
@@ -188,8 +194,8 @@ function PopupBody({ initial }: { initial: Loaded }) {
   );
 }
 
-export function Popup({ db }: { db?: AtelierDB }) {
-  const [resolved] = useState(() => db ?? (defaultDb ??= openDb()));
+function PopupLoader() {
+  const resolved = useDb();
   const [initial, setInitial] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -210,10 +216,13 @@ export function Popup({ db }: { db?: AtelierDB }) {
   }
   if (!initial) return null;
   return (
-    <DbProvider db={resolved}>
-      <NoticeProvider>
-        <PopupBody initial={initial} />
-      </NoticeProvider>
-    </DbProvider>
+    <NoticeProvider>
+      <PopupBody initial={initial} />
+    </NoticeProvider>
   );
+}
+
+/** `db` is for tests; without it the active account's partition is opened. */
+export function Popup({ db }: { db?: AtelierDB }) {
+  return db ? <DbProvider db={db}><PopupLoader /></DbProvider> : <ActiveDbProvider><PopupLoader /></ActiveDbProvider>;
 }

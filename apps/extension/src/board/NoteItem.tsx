@@ -11,7 +11,9 @@ import { Menu } from '../ui/components/Menu';
 import { Icon } from '../ui/components/Icon';
 import { useRun } from './Notice';
 import { removeAndRefocus } from './removeItem';
+import { Tag } from '../ui/components/Tag';
 import { useSortableItem } from './dnd';
+import { useCanEdit } from './useRole';
 
 type Node = { type?: string; text?: string; content?: Node[] };
 
@@ -40,6 +42,7 @@ export function NoteItem({ item, autoFocus = false, onAutoFocused }: { item: Ite
   const db = useDb();
   const run = useRun();
   const row = useRef<HTMLDivElement | null>(null);
+  const canEdit = useCanEdit();
   const dnd = useSortableItem(item, false);
   const pending = useRef<Node | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -61,6 +64,7 @@ export function NoteItem({ item, autoFocus = false, onAutoFocused }: { item: Ite
       TaskList,
       TaskItem.configure({ nested: true }),
     ],
+    editable: canEdit,
     content: (item.body as Node | null) ?? '',
     editorProps: {
       attributes: { role: 'textbox', 'aria-multiline': 'true', 'aria-label': item.title ? `Note: ${item.title}` : 'New note', class: 'atl-note-editor' },
@@ -79,6 +83,8 @@ export function NoteItem({ item, autoFocus = false, onAutoFocused }: { item: Ite
     editor.commands.focus('end');
     onAutoFocused?.();
   }, [autoFocus, editor, onAutoFocused]);
+
+  useEffect(() => { editor?.setEditable(canEdit); }, [editor, canEdit]);
 
   // Keep the label current as the title changes (attributes are fixed at creation otherwise).
   useEffect(() => {
@@ -112,14 +118,15 @@ export function NoteItem({ item, autoFocus = false, onAutoFocused }: { item: Ite
     <div className="atl-item atl-note" data-item-id={item.id} ref={(el) => { row.current = el; dnd.setNodeRef(el); }} style={dnd.style}>
       {dnd.handle}
       <div className="atl-note-well"><EditorContent editor={editor} /></div>
-      <div className="atl-item-menu">
+      {item.restored && <Tag tone="ochre">Restored</Tag>}
+      {canEdit && <div className="atl-item-menu">
         <Menu
           trigger={<Icon name="more" size={18} />}
           triggerLabel="Note options"
           triggerClassName="atl-icon"
           items={[{ label: 'Delete', danger: true, onSelect: () => void remove() }]}
         />
-      </div>
+      </div>}
     </div>
   );
 }

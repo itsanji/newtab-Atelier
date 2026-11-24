@@ -2,7 +2,7 @@ import type { ReactElement, SVGProps } from 'react';
 
 export type IconName =
   | 'plus' | 'more' | 'moon' | 'sun' | 'search' | 'grip' | 'close'
-  | 'bell' | 'share' | 'external' | 'trash' | 'edit' | 'check' | 'contrast';
+  | 'bell' | 'share' | 'external' | 'trash' | 'edit' | 'check' | 'contrast' | 'user';
 
 const paths: Record<IconName, ReactElement> = {
   plus: <path d="M12 5v14M5 12h14" />,
@@ -19,6 +19,7 @@ const paths: Record<IconName, ReactElement> = {
   edit: <path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" />,
   contrast: (<><circle cx="12" cy="12" r="8" /><path d="M12 4v16M8 8.5l4 0M6.5 12H12M8 15.5h4" /></>),
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+  user: (<><circle cx="12" cy="8.5" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></>),
 };
 
 export function Icon({ name, size = 20, ...rest }: { name: IconName; size?: number } & Omit<SVGProps<SVGSVGElement>, 'name'>) {

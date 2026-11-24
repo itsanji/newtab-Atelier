@@ -10,6 +10,8 @@ import { useRun } from './Notice';
 import { removeAndRefocus } from './removeItem';
 import { useSortableItem } from './dnd';
 import { Dialog } from '../ui/components/Dialog';
+import { Tag } from '../ui/components/Tag';
+import { useCanEdit } from './useRole';
 import { domainOf, normalizeUrl } from './url';
 
 const TONES = ['lily', 'sage', 'rose', 'ochre'] as const;
@@ -28,6 +30,7 @@ export function ItemRow({ item }: { item: Item }) {
   const [editing, setEditing] = useState(false);
   const url = item.url ?? '';
   const domain = domainOf(url);
+  const canEdit = useCanEdit();
   const dnd = useSortableItem(item, true);
   const tone = TONES[hash(item.id) % 4];
 
@@ -60,8 +63,9 @@ export function ItemRow({ item }: { item: Item }) {
           </span>
           <span className="atl-item-domain">{domain}</span>
         </span>
+        {item.restored && <Tag tone="ochre">Restored</Tag>}
       </a>
-      <div className="atl-item-menu">
+      {canEdit && <div className="atl-item-menu">
         <Menu
           trigger={<Icon name="more" size={18} />}
           triggerLabel="Link options"
@@ -71,7 +75,7 @@ export function ItemRow({ item }: { item: Item }) {
             { label: 'Delete', danger: true, onSelect: () => void remove() },
           ]}
         />
-      </div>
+      </div>}
       <Dialog open={editing} title="Edit link" onClose={() => setEditing(false)}>
         <LinkForm
           initial={{ url, title: item.title }}

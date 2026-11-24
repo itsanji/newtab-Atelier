@@ -14,7 +14,11 @@ import { Menu } from '../ui/components/Menu';
 import { Icon } from '../ui/components/Icon';
 import { IconButton } from '../ui/components/IconButton';
 import { EmojiPicker } from './EmojiPicker';
-import { useRun } from './Notice';
+import { useNotify, useRun } from './Notice';
+import { useCanEdit, useCurrentRole, VIEW_ONLY } from './useRole';
+import { useAccount } from '../account/account';
+import { ApiClient } from '../sync/api';
+import { syncNow } from '../sync/localWrites';
 import { AddItemMenu } from './AddItemMenu';
 import { CategoryNameContext } from './dnd';
 import { ItemRow } from './ItemRow';
@@ -24,8 +28,12 @@ import { TodoItem } from './TodoItem';
 export function CategoryColumn({ category, onOpenAll }: { category: Category; onOpenAll?: () => void }) {
   const db = useDb();
   const run = useRun();
+  const notify = useNotify();
+  const canEdit = useCanEdit();
+  const role = useCurrentRole();
+  const account = useAccount();
   const section = useRef<HTMLElement | null>(null);
-  const sort = useSortable({ id: category.id, data: { type: 'category', title: category.name } });
+  const sort = useSortable({ id: category.id, disabled: !canEdit, data: { type: 'category', title: category.name } });
   const style: CSSProperties = { transform: CSS.Translate.toString(sort.transform), transition: sort.transition, opacity: sort.isDragging ? 0.4 : undefined };
   const items = useLiveQuery(() => liveItems(db, category.id), [db, category.id]) ?? [];
   const [renaming, setRenaming] = useState(false);
@@ -35,6 +43,36 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
   const afterDelete = useRef<HTMLElement | null>(null);
 
   const startRename = () => setRenaming(true);
+
+  // Public links: only for signed-in editors and owners; the server mints the token and the url.
+  const publicLink = async (action: 'create' | 'copy' | 'stop') => {
+    if (!account) return;
+    const api = new ApiClient(account.serverUrl, account.token);
+    try {
+      if (action === 'stop') {
+        await api.unshare(category.id);
+        await db.categories.update(category.id, { shareToken: null });
+        notify('Public link stopped');
+      } else {
+        const { shareToken, url } = await api.share(category.id);
+        await db.categories.update(category.id, { shareToken });
+        try {
+          await navigator.clipboard.writeText(url);
+          notify('Link copied');
+        } catch {
+          notify(`Couldn't copy the link: ${url}`);
+        }
+      }
+      syncNow();
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Something went wrong. Try again.');
+    }
+  };
+  const linkItems = account && role !== 'viewer'
+    ? category.shareToken
+      ? [{ label: 'Copy public link', onSelect: () => void publicLink('copy') }, { label: 'Stop sharing', onSelect: () => void publicLink('stop') }]
+      : [{ label: 'Create public link', onSelect: () => void publicLink('create') }]
+    : [];
 
   // The column unmounts on delete, so hand focus to the next column heading, or else the New category tile.
   const nextFocus = () => {
@@ -59,9 +97,11 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
   return (
     <section className="atl-column" ref={(el) => { section.current = el; sort.setNodeRef(el); }} style={style} aria-label={category.name}>
       <div className="atl-column-head">
-        <IconButton label="Drag to reorder category" icon="grip" className="atl-grip" ref={sort.setActivatorNodeRef} {...sort.attributes} {...sort.listeners} />
-        <EmojiPicker value={category.emoji} onChange={(emoji) => void run(updateCategory(db, category.id, { emoji }))} />
-        {renaming ? (
+        {canEdit && <IconButton label="Drag to reorder category" icon="grip" className="atl-grip" ref={sort.setActivatorNodeRef} {...sort.attributes} {...sort.listeners} />}
+        {canEdit
+          ? <EmojiPicker value={category.emoji} onChange={(emoji) => void run(updateCategory(db, category.id, { emoji }))} />
+          : category.emoji && <span aria-hidden="true">{category.emoji}</span>}
+        {renaming && canEdit ? (
           <InlineNameField
             label="Category name"
             initial={category.name}
@@ -73,19 +113,23 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
           />
         ) : (
           <h2 className="atl-column-title">
-            <button type="button" className="atl-title-btn" onClick={startRename}>{category.name}</button>
+            <button type="button" className="atl-title-btn" onClick={startRename} disabled={!canEdit} title={canEdit ? undefined : VIEW_ONLY}>{category.name}</button>
           </h2>
         )}
         {category.tabGroup ? <Tag tone="lily">Tab group · {items.length}</Tag> : <Tag>{items.length}</Tag>}
-        <Menu
-          trigger={<Icon name="more" size={18} />}
-          triggerLabel="Category options"
-          triggerClassName="atl-icon"
-          items={[
-            { label: 'Rename', onSelect: startRename },
-            { label: 'Delete', danger: true, onSelect: askRemove },
-          ]}
-        />
+        {category.shareToken && <Tag tone="sage">Public</Tag>}
+        {canEdit && (
+          <Menu
+            trigger={<Icon name="more" size={18} />}
+            triggerLabel="Category options"
+            triggerClassName="atl-icon"
+            items={[
+              { label: 'Rename', onSelect: startRename },
+              ...linkItems,
+              { label: 'Delete', danger: true, onSelect: askRemove },
+            ]}
+          />
+        )}
       </div>
       <CategoryNameContext.Provider value={category.name}>
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>

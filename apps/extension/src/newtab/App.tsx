@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { openDb, type AtelierDB } from '../data/db';
-import { DbProvider } from '../data/DbContext';
+import type { AtelierDB } from '../data/db';
+import { DbProvider, useDb } from '../data/DbContext';
+import { useAccount } from '../account/account';
+import { useLiveSync } from '../sync/live';
+import { ActiveDbProvider } from '../account/activeDb';
 import { buildIndex, search } from '../data/search';
 import { SearchResults } from '../board/SearchResults';
 import { getMeta, liveWorkspaces, setMeta } from '../data/queries';
@@ -13,9 +16,12 @@ import { BoardHeader } from '../board/BoardHeader';
 import { BoardDnd } from '../board/dnd';
 import { Sidebar } from '../board/Sidebar';
 import { useHighlightItem } from '../board/useHighlightItem';
+import { AccountEntry } from '../board/AccountDialog';
+import { RoleProvider } from '../board/useRole';
+import { useRecoveredNotice } from '../board/useRecovered';
+import { CURSOR_KEY } from '../sync/engine';
 
 const SELECTED_KEY = 'selectedWorkspaceId';
-let defaultDb: AtelierDB | undefined;
 
 function Shell({ db }: { db: AtelierDB }) {
   const theme = useTheme();
@@ -24,6 +30,7 @@ function Shell({ db }: { db: AtelierDB }) {
   // `null` means "no choice stored"; `undefined` means "still loading".
   const stored = useLiveQuery(async () => (await getMeta<string>(db, SELECTED_KEY)) ?? null, [db]);
   const highlight = useHighlightItem();
+  useRecoveredNotice();
   const [query, setQuery] = useState('');
   const trimmed = query.trim();
   // Rows are read and indexed only while there is something to search for.
@@ -61,6 +68,7 @@ function Shell({ db }: { db: AtelierDB }) {
     <BoardDnd>
     <div className="atl-shell">
       <Sidebar workspaces={workspaces} selectedId={selected.id} onSelect={(id) => void run(setMeta(db, SELECTED_KEY, id))} />
+      <RoleProvider workspaceId={selected.id}>
       <main className="atl-main">
         <BoardHeader workspace={selected} query={query} onQueryChange={setQuery} theme={theme} />
         {trimmed ? (
@@ -78,25 +86,50 @@ function Shell({ db }: { db: AtelierDB }) {
           <Board key={selected.id} workspace={selected} />
         )}
       </main>
+      </RoleProvider>
     </div>
     </BoardDnd>
   );
 }
 
-export function App({ db }: { db?: AtelierDB }) {
-  const [resolved] = useState(() => db ?? (defaultDb ??= openDb()));
-  const [ready, setReady] = useState(false);
+function LiveSync() {
+  useLiveSync(useAccount());
+  return null;
+}
+
+function Ready() {
+  const db = useDb();
+  const account = useAccount();
+  const state = useLiveQuery(async () => ({
+    hasWorkspaces: (await db.workspaces.count()) > 0,
+    pulled: (await getMeta(db, CURSOR_KEY)) !== undefined,
+  }), [db]);
+  // A signed-in board gets its starter workspace only after the first pull found none on the server.
+  const waitForPull = !!account && !!state && !state.hasWorkspaces && !state.pulled;
   useEffect(() => {
-    let live = true;
-    void ensureSeed(resolved).then(() => live && setReady(true));
-    return () => { live = false; };
-  }, [resolved]);
-  if (!ready) return null;
+    if (account === undefined || !state || state.hasWorkspaces || waitForPull) return;
+    void ensureSeed(db).catch((e: unknown) => console.error(e));
+  }, [db, account, state, waitForPull]);
+  if (account === undefined || !state) return null;
+  if (waitForPull) {
+    return (
+      <div className="atl-waiting" role="status">
+        <LiveSync />
+        <p>Getting your board from the server…</p>
+        <AccountEntry />
+      </div>
+    );
+  }
+  if (!state.hasWorkspaces) return null;
   return (
-    <DbProvider db={resolved}>
-      <NoticeProvider>
-        <Shell db={resolved} />
-      </NoticeProvider>
-    </DbProvider>
+    <NoticeProvider>
+      <LiveSync />
+      <Shell db={db} />
+    </NoticeProvider>
   );
+}
+
+/** `db` is for tests; without it the active account's partition is opened. */
+export function App({ db }: { db?: AtelierDB }) {
+  return db ? <DbProvider db={db}><Ready /></DbProvider> : <ActiveDbProvider><Ready /></ActiveDbProvider>;
 }

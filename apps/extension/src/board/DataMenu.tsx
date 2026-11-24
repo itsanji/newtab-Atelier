@@ -2,7 +2,21 @@ import { useRef } from 'react';
 import { useDb } from '../data/DbContext';
 import { exportAll, importFile, ImportError, parseExportText } from '../data/exportImport';
 import { Menu } from '../ui/components/Menu';
+import type { AtelierDB } from '../data/db';
 import { useNotify } from './Notice';
+
+/** Save every live row of `db` as an Atelier export file (browser download). */
+export async function downloadExport(db: AtelierDB): Promise<void> {
+  const file = await exportAll(db);
+  const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `atelier-export-${file.exportedAt.slice(0, 10)}.json`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 export function DataMenu() {
   const db = useDb();
@@ -11,15 +25,7 @@ export function DataMenu() {
 
   const doExport = async () => {
     try {
-      const file = await exportAll(db);
-      const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `atelier-export-${file.exportedAt.slice(0, 10)}.json`;
-      document.body.append(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      await downloadExport(db);
     } catch (e) {
       console.error(e);
       notify('Something went wrong. Try again.');
