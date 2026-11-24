@@ -37,6 +37,10 @@ The unpacked extension is written to `apps/extension/dist`.
 
 Press Alt+Shift+S to save the current tab. You can change the shortcut at `chrome://extensions/shortcuts`.
 
+## Self-hosted server
+
+An optional server adds accounts, sync, shared workspaces and public category links. It runs with `docker compose up -d`; see [docs/self-hosting.md](docs/self-hosting.md).
+
 ## End-to-end tests
 
 ```sh

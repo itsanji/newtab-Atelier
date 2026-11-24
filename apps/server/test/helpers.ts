@@ -33,6 +33,8 @@ export const testConfig = (overrides: Partial<Config> = {}): Config => ({
   databaseUrl: 'postgres://unused',
   sessionSecret: 'test-secret-test-secret-test-secret!',
   port: 0,
+  trustProxy: false,
+  allowSignup: true,
   smtp: null,
   google: null,
   ...overrides,

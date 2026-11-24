@@ -16,7 +16,7 @@ describe('app', () => {
     ctx = await makeApp();
     const res = await ctx.app.request('/api/config');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ name: 'Atelier', auth: { password: true, magicLink: false, google: false } });
+    expect(await res.json()).toEqual({ name: 'Atelier', signup: true, auth: { password: true, magicLink: false, google: false } });
   });
 
   test('GET /api/config reports magicLink and google when configured', async () => {
@@ -28,6 +28,11 @@ describe('app', () => {
     });
     const body = (await (await ctx.app.request('/api/config')).json()) as { auth: object };
     expect(body.auth).toEqual({ password: true, magicLink: true, google: true });
+  });
+
+  test('GET /api/config reports signup false when closed', async () => {
+    ctx = await makeApp({ config: { allowSignup: false } });
+    expect(((await (await ctx.app.request('/api/config')).json()) as { signup: boolean }).signup).toBe(false);
   });
 
   test('unknown API routes return a JSON 404', async () => {

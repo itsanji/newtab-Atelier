@@ -15,6 +15,8 @@ describe('loadConfig', () => {
       databaseUrl: minimal.DATABASE_URL,
       sessionSecret: minimal.SESSION_SECRET,
       port: 8787,
+      trustProxy: false,
+      allowSignup: true,
       smtp: null,
       google: null,
     });
@@ -87,5 +89,18 @@ describe('loadConfig', () => {
     expect(c.smtp).toBeNull();
     expect(c.google).toBeNull();
     expect(c.port).toBe(8787);
+  });
+
+  test('TRUST_PROXY defaults to false and accepts true or false only', () => {
+    expect(loadConfig(minimal).trustProxy).toBe(false);
+    expect(loadConfig({ ...minimal, TRUST_PROXY: 'true' }).trustProxy).toBe(true);
+    expect(loadConfig({ ...minimal, TRUST_PROXY: 'false' }).trustProxy).toBe(false);
+    expect(() => loadConfig({ ...minimal, TRUST_PROXY: 'yes' })).toThrow(/TRUST_PROXY/);
+  });
+
+  test('ALLOW_SIGNUP defaults to true and accepts true or false only', () => {
+    expect(loadConfig(minimal).allowSignup).toBe(true);
+    expect(loadConfig({ ...minimal, ALLOW_SIGNUP: 'false' }).allowSignup).toBe(false);
+    expect(() => loadConfig({ ...minimal, ALLOW_SIGNUP: 'no' })).toThrow(/ALLOW_SIGNUP/);
   });
 });

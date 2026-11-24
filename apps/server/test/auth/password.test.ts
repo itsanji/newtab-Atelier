@@ -84,7 +84,7 @@ describe('password auth', () => {
   });
 
   test('login is rate limited', async () => {
-    ctx = await makeApp();
+    ctx = await makeApp({ config: { trustProxy: true } });
     await signUp(ctx.app, 'ann@example.com');
     const ip = { 'x-forwarded-for': '203.0.113.9, 10.0.0.1' };
     for (let i = 0; i < 10; i++) {
@@ -96,6 +96,36 @@ describe('password auth', () => {
     // another IP is not affected
     const other = await post('/api/auth/login', { email: 'ann@example.com', password: 'correct horse battery' }, { 'x-forwarded-for': '203.0.113.10' });
     expect(other.status).toBe(200);
+  });
+
+  test('login limit ignores X-Forwarded-For unless the proxy is trusted', async () => {
+    ctx = await makeApp();
+    await signUp(ctx.app, 'ann@example.com');
+    for (let i = 0; i < 10; i++) {
+      const res = await post('/api/auth/login', { email: 'ann@example.com', password: 'nope nope' }, { 'x-forwarded-for': `198.51.100.${i}` });
+      expect(res.status).toBe(401);
+    }
+    const spoofed = await post('/api/auth/login', { email: 'ann@example.com', password: 'correct horse battery' }, { 'x-forwarded-for': '203.0.113.77' });
+    expect(spoofed.status).toBe(429);
+  });
+
+  test('with a trusted proxy the last X-Forwarded-For entry is the client, so a spoofed first entry does not help', async () => {
+    ctx = await makeApp({ config: { trustProxy: true } });
+    await signUp(ctx.app, 'ann@example.com');
+    for (let i = 0; i < 10; i++) {
+      const res = await post('/api/auth/login', { email: 'ann@example.com', password: 'nope nope' }, { 'x-forwarded-for': `198.51.100.${i}, 203.0.113.9` });
+      expect(res.status).toBe(401);
+    }
+    const blocked = await post('/api/auth/login', { email: 'ann@example.com', password: 'correct horse battery' }, { 'x-forwarded-for': '192.0.2.1, 203.0.113.9' });
+    expect(blocked.status).toBe(429);
+  });
+
+  test('signup is refused when ALLOW_SIGNUP is false', async () => {
+    ctx = await makeApp({ config: { allowSignup: false } });
+    const res = await post('/api/auth/signup', { email: 'ann@example.com', password: 'longenough1' });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'Sign-ups are closed on this server' });
+    expect((await ctx.sql`select count(*)::int as n from users`)[0].n).toBe(0);
   });
 
   test('signup attaches pending invites', async () => {

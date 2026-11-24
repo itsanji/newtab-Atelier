@@ -39,6 +39,7 @@ export function authRoutes(sql: SQL, config: Config, now: () => Date): Hono<Auth
   const secret = config.sessionSecret;
 
   routes.post('/signup', async (c) => {
+    if (!config.allowSignup) return c.json({ error: 'Sign-ups are closed on this server' }, 403);
     const body = await readJson(c);
     const email = typeof body.email === 'string' ? normaliseEmail(body.email) : '';
     const password = typeof body.password === 'string' ? body.password : '';
@@ -62,7 +63,7 @@ export function authRoutes(sql: SQL, config: Config, now: () => Date): Hono<Auth
     const body = await readJson(c);
     const email = typeof body.email === 'string' ? normaliseEmail(body.email) : '';
     const password = typeof body.password === 'string' ? body.password : '';
-    const key = `${clientIp(c.req.raw.headers, socketAddress(c))}|${email}`;
+    const key = `${clientIp(c.req.raw.headers, socketAddress(c), config.trustProxy)}|${email}`;
     if (limiter.isBlocked(key)) return c.json({ error: 'Too many attempts. Try again later' }, 429);
 
     const [user] = await sql`select id, email, display_name, password_hash from users where email = ${email}`;

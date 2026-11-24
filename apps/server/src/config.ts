@@ -11,6 +11,10 @@ export interface Config {
   databaseUrl: string;
   sessionSecret: string;
   port: number;
+  /** Believe the last `X-Forwarded-For` entry; only safe behind a reverse proxy that appends it. */
+  trustProxy: boolean;
+  /** When false, password sign-up is refused and magic link or Google cannot create accounts (invited emails still can). */
+  allowSignup: boolean;
   smtp: { url: string; from: string } | null;
   google: GoogleConfig | null;
 }
@@ -58,6 +62,12 @@ export function loadConfig(env: Env): Config {
   const port = rawPort === undefined ? 8787 : Number(rawPort);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new ConfigError('PORT must be a number from 1 to 65535');
 
+  const rawTrust = get('TRUST_PROXY')?.toLowerCase();
+  if (rawTrust !== undefined && rawTrust !== 'true' && rawTrust !== 'false') throw new ConfigError('TRUST_PROXY must be true or false');
+
+  const rawSignup = get('ALLOW_SIGNUP')?.toLowerCase();
+  if (rawSignup !== undefined && rawSignup !== 'true' && rawSignup !== 'false') throw new ConfigError('ALLOW_SIGNUP must be true or false');
+
   const smtpUrl = get('SMTP_URL');
   const smtpFrom = get('SMTP_FROM');
   if (smtpUrl && !smtpFrom) throw new ConfigError('SMTP_FROM is required when SMTP_URL is set');
@@ -73,6 +83,8 @@ export function loadConfig(env: Env): Config {
     databaseUrl,
     sessionSecret,
     port,
+    trustProxy: rawTrust === 'true',
+    allowSignup: rawSignup !== 'false',
     smtp: smtpUrl && smtpFrom ? { url: smtpUrl, from: smtpFrom } : null,
     google:
       clientId && clientSecret

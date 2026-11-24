@@ -231,6 +231,34 @@ describe('sync', () => {
     expect((await push(a.token, [{ table: 'workspaces', row: { ...a.w, deletedAt: T0 } }]))[0]!.status).toBe('applied');
   });
 
+  test('push with NUL characters is applied with them removed', async () => {
+    ctx = await makeApp();
+    const u = await signUp(ctx.app, 'nul@example.com');
+    const w = ws({ name: 'Ho\u0000me' });
+    const c = cat(w.id, { name: 'Read\u0000ing' });
+    const i = item(c.id, {
+      title: 'Ti\u0000tle',
+      note: 'no\u0000te',
+      url: 'https://exa\u0000mple.com/',
+      body: { 'k\u0000ey': ['a\u0000b', { nested: 'x\u0000' }] },
+    });
+    const results = await push(u.token, [
+      { table: 'workspaces', row: w },
+      { table: 'categories', row: c },
+      { table: 'items', row: i },
+    ]);
+    expect(results.map((r) => r.status)).toEqual(['applied', 'applied', 'applied']);
+    const p = await pull(u.token, 0);
+    expect(p.workspaces[0]).toMatchObject({ name: 'Home' });
+    expect(p.categories[0]).toMatchObject({ name: 'Reading' });
+    expect(p.items[0]).toMatchObject({
+      title: 'Title',
+      note: 'note',
+      url: 'https://example.com/',
+      body: { key: ['ab', { nested: 'x' }] },
+    });
+  });
+
   test('push restores a deleted parent', async () => {
     ctx = await makeApp();
     const a = await seed('a@example.com');

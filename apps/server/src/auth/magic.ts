@@ -118,7 +118,8 @@ export function magicRoutes(sql: SQL, config: Config, now: () => Date, mail: Mai
       where token_hash = ${hashToken(secret, token)} and expires_at > ${t} and verified_user_id is null and consumed_at is null`;
     if (!link) return html(c, magicInvalidPage(), 400);
 
-    const user = await findOrCreateVerifiedUser(sql, link.email, '', t);
+    const user = await findOrCreateVerifiedUser(sql, link.email, '', t, config.allowSignup);
+    if (!user) return html(c, magicInvalidPage(), 400);
     const [done] = await sql`update magic_links set verified_user_id = ${user.id}
       where id = ${link.id} and verified_user_id is null returning id`;
     if (!done) return html(c, magicInvalidPage(), 400);

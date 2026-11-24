@@ -33,6 +33,7 @@ export function createApp(deps: Deps): { app: Hono; websocket: typeof websocket;
   app.get('/api/config', (c) =>
     c.json({
       name: 'Atelier',
+      signup: config.allowSignup,
       auth: { password: true, magicLink: config.smtp !== null, google: config.google !== null },
     }),
   );

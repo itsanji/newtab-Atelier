@@ -30,8 +30,14 @@ export class RateLimiter {
   }
 }
 
-/** First `x-forwarded-for` entry, else the socket address. */
-export function clientIp(headers: Headers, socketAddress: string | undefined): string {
-  const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  return forwarded || socketAddress || 'unknown';
+/**
+ * The caller's address. Without `trustProxy` that is the socket address and `X-Forwarded-For` is ignored (a client
+ * can send anything in it). With it, the last entry: the one the reverse proxy appended itself.
+ */
+export function clientIp(headers: Headers, socketAddress: string | undefined, trustProxy: boolean): string {
+  if (trustProxy) {
+    const forwarded = headers.get('x-forwarded-for')?.split(',').at(-1)?.trim();
+    if (forwarded) return forwarded;
+  }
+  return socketAddress || 'unknown';
 }

@@ -76,7 +76,8 @@ export function googleRoutes(sql: SQL, config: Config, now: () => Date): { pages
         return c.text('Your Google email address is not verified', 400);
       }
 
-      const user = await findOrCreateVerifiedUser(sql, info.email, typeof info.name === 'string' ? info.name : '', now());
+      const user = await findOrCreateVerifiedUser(sql, info.email, typeof info.name === 'string' ? info.name : '', now(), config.allowSignup);
+      if (!user) return c.text('Sign-ups are closed on this server', 403);
       const oneTime = randomToken();
       await sql`insert into oauth_codes (code_hash, user_id, expires_at)
         values (${hashToken(secret, oneTime)}, ${user.id}, ${new Date(now().getTime() + CODE_TTL_MS)})`;

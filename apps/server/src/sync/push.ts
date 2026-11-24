@@ -51,6 +51,16 @@ const SCHEMAS = {
   reminders: reminderSchema,
 } as const;
 
+/** Postgres text and jsonb cannot hold U+0000; strip it from every string and key before validating. */
+function stripNul(value: unknown): unknown {
+  if (typeof value === 'string') return value.includes('\u0000') ? value.replaceAll('\u0000', '') : value;
+  if (Array.isArray(value)) return value.map(stripNul);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k.replaceAll('\u0000', ''), stripNul(v)]));
+  }
+  return value;
+}
+
 interface Ctx {
   tx: SQL;
   user: { id: string; email: string };
@@ -78,7 +88,7 @@ export async function applyPush(
     for (const { change, index } of order) {
       const raw = change.row as { id?: unknown } | null;
       const id = raw && typeof raw === 'object' && typeof raw.id === 'string' ? raw.id : '';
-      const parsed = SCHEMAS[change.table].safeParse(change.row);
+      const parsed = SCHEMAS[change.table].safeParse(stripNul(change.row));
       const outcome = parsed.success ? await apply(ctx, change.table, parsed.data) : rejected('invalid');
       if (change.table === 'reminders' && outcome.status !== 'rejected') remindersChanged = true;
       results[index] = { table: change.table, id, ...outcome };
