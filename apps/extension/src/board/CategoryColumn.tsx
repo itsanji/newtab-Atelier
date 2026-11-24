@@ -63,7 +63,7 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
       </div>
       {items.map((item) => {
         if (item.kind === 'link') return <ItemRow key={item.id} item={item} />;
-        if (item.kind === 'note') return <NoteItem key={item.id} item={item} autoFocus={item.id === freshNote} />;
+        if (item.kind === 'note') return <NoteItem key={item.id} item={item} autoFocus={item.id === freshNote} onAutoFocused={() => setFreshNote(null)} />;
         if (item.kind === 'todo') return <TodoItem key={item.id} item={item} />;
         return null;
       })}

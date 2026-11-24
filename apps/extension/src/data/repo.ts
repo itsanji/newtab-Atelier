@@ -151,7 +151,7 @@ export function deleteCategory(db: AtelierDB, id: string): Promise<void> {
 export function createItem(
   db: AtelierDB,
   input: {
-    categoryId: string; kind: Item['kind']; title: string; url?: string | null; faviconUrl?: string | null;
+    id?: string; categoryId: string; kind: Item['kind']; title: string; url?: string | null; faviconUrl?: string | null;
     note?: string | null; body?: unknown; position?: 'start' | 'end';
   },
 ): Promise<Item> {
@@ -163,7 +163,7 @@ export function createItem(
       ? keyBetween(null, siblings[0]?.sortKey ?? null)
       : keyBetween(siblings.at(-1)?.sortKey ?? null, null);
     const row: Item = {
-      ...base(now), categoryId: input.categoryId, kind: input.kind, sortKey, title: input.title,
+      ...base(now), ...(input.id ? { id: input.id } : {}), categoryId: input.categoryId, kind: input.kind, sortKey, title: input.title,
       url: input.url ?? null, faviconUrl: input.faviconUrl ?? null, note: input.note ?? null,
       body: input.body ?? null, done: false,
     };

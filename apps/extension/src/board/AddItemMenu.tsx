@@ -38,10 +38,11 @@ export function AddItemMenu({ categoryId, onCreated }: { categoryId: string; onC
       />
     );
   }
-  const addNote = async () => {
-    let id: string | undefined;
-    await run(createItem(db, { categoryId, kind: 'note', title: '', body: null }).then((i) => { id = i.id; }));
-    if (id) onCreated?.(id);
+  // The id is known before the row exists, so the column can mark it fresh before the editor mounts.
+  const addNote = () => {
+    const id = crypto.randomUUID();
+    onCreated?.(id);
+    void run(createItem(db, { id, categoryId, kind: 'note', title: '', body: null }));
   };
   return (
     <Menu
@@ -49,7 +50,7 @@ export function AddItemMenu({ categoryId, onCreated }: { categoryId: string; onC
       triggerClassName="im-btn im-btn-ghost"
       items={[
         { label: 'Link', onSelect: () => setAdding('link') },
-        { label: 'Note', onSelect: () => void addNote() },
+        { label: 'Note', onSelect: () => addNote() },
         { label: 'To-do', onSelect: () => setAdding('todo') },
       ]}
     />

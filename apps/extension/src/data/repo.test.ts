@@ -101,3 +101,11 @@ test('concurrent ensureSeed seeds exactly once', async () => {
   expect(await db.workspaces.count()).toBe(1);
   expect(await db.categories.count()).toBe(2);
 });
+
+test('createItem accepts a caller-supplied id', async () => {
+  const { cat } = await setup();
+  const id = crypto.randomUUID();
+  const row = await createItem(db, { id, categoryId: cat.id, kind: 'note', title: '' });
+  expect(row.id).toBe(id);
+  expect(await db.items.get(id)).toBeTruthy();
+});

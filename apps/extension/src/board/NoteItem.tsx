@@ -35,7 +35,7 @@ export function deriveTitle(doc: Node | null): string {
 
 const DEBOUNCE_MS = 400;
 
-export function NoteItem({ item, autoFocus = false }: { item: Item; autoFocus?: boolean }) {
+export function NoteItem({ item, autoFocus = false, onAutoFocused }: { item: Item; autoFocus?: boolean; onAutoFocused?(): void }) {
   const db = useDb();
   const run = useRun();
   const row = useRef<HTMLDivElement>(null);
@@ -60,9 +60,8 @@ export function NoteItem({ item, autoFocus = false }: { item: Item; autoFocus?: 
       TaskItem.configure({ nested: true }),
     ],
     content: (item.body as Node | null) ?? '',
-    autofocus: autoFocus ? 'end' : false,
     editorProps: {
-      attributes: { role: 'textbox', 'aria-multiline': 'true', 'aria-label': 'Note', class: 'atl-note-editor' },
+      attributes: { role: 'textbox', 'aria-multiline': 'true', 'aria-label': item.title ? `Note: ${item.title}` : 'New note', class: 'atl-note-editor' },
     },
     onUpdate: ({ editor: ed }) => {
       pending.current = ed.getJSON() as Node;
@@ -71,6 +70,20 @@ export function NoteItem({ item, autoFocus = false }: { item: Item; autoFocus?: 
     },
     onBlur: flush,
   });
+
+  // Focus was requested once at creation; clear the request so a later remount does not steal focus.
+  useEffect(() => {
+    if (!autoFocus || !editor) return;
+    editor.commands.focus('end');
+    onAutoFocused?.();
+  }, [autoFocus, editor, onAutoFocused]);
+
+  // Keep the label current as the title changes (attributes are fixed at creation otherwise).
+  useEffect(() => {
+    editor?.setOptions({
+      editorProps: { attributes: { role: 'textbox', 'aria-multiline': 'true', 'aria-label': item.title ? `Note: ${item.title}` : 'New note', class: 'atl-note-editor' } },
+    });
+  }, [editor, item.title]);
 
   // Never lose edits: flush when the tab hides or closes, and on unmount.
   const flushRef = useRef(flush);
