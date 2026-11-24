@@ -116,3 +116,7 @@ a { color: var(--lily); }
 .atl-popup-link:hover { color: var(--ink); }
 .atl-popup-status { display: flex; align-items: center; gap: var(--space-2); font-size: 14px; line-height: 20px; color: var(--sage); margin: 0; }
 .atl-popup-hint { font-size: 13px; line-height: 18px; color: var(--ink-muted); margin: 0; }
+.atl-highlight { background: var(--lily-soft); border-radius: var(--radius-md); }
+.atl-reminder { display: inline-flex; }
+.atl-reminder-pop { display: flex; flex-direction: column; gap: var(--space-1); min-width: 220px; }
+.atl-reminder-custom { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2); }

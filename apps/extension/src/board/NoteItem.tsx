@@ -109,7 +109,7 @@ export function NoteItem({ item, autoFocus = false, onAutoFocused }: { item: Ite
   };
 
   return (
-    <div className="atl-item atl-note" ref={(el) => { row.current = el; dnd.setNodeRef(el); }} style={dnd.style}>
+    <div className="atl-item atl-note" data-item-id={item.id} ref={(el) => { row.current = el; dnd.setNodeRef(el); }} style={dnd.style}>
       {dnd.handle}
       <div className="atl-note-well"><EditorContent editor={editor} /></div>
       <div className="atl-item-menu">

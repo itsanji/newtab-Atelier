@@ -210,6 +210,7 @@ export function createChromeFake() {
     runtime: {
       onMessage: createEvent<(message: unknown, sender: object, sendResponse: Listener) => void>(),
       onInstalled: createEvent<(details: object) => void>(),
+      onStartup: createEvent<() => void>(),
       sendMessage: vi.fn(async (_message: unknown) => undefined),
       getURL: (path: string) => `chrome-extension://fake/${path.replace(/^\//, '')}`,
       id: 'fake-extension-id',

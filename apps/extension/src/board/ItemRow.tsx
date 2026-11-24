@@ -36,6 +36,7 @@ export function ItemRow({ item }: { item: Item }) {
   return (
     <div
       className="atl-item"
+      data-item-id={item.id}
       ref={(el) => { row.current = el; dnd.setNodeRef(el); }}
       style={dnd.style}
       {...dnd.rowProps}

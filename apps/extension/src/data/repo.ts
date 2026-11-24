@@ -1,4 +1,4 @@
-import { keyBetween, type Category, type Item, type TableName, type Workspace } from '@atelier/core';
+import { keyBetween, type Category, type Item, type Iso, type Reminder, type TableName, type Workspace } from '@atelier/core';
 import { LOCAL_USER, type AtelierDB } from './db';
 import { liveCategories, liveItems, liveWorkspaces } from './queries';
 
@@ -198,5 +198,30 @@ export function deleteItem(db: AtelierDB, id: string): Promise<void> {
     const now = clock.now();
     const cur = await live<Item>(db, 'items', id);
     await save(db, 'items', { ...cur, deletedAt: now, ...stamp(now) }, now);
+  });
+}
+
+// Reminders: at most one live reminder per item per user.
+
+async function liveReminder(db: AtelierDB, itemId: string): Promise<Reminder | undefined> {
+  return (await db.reminders.where('itemId').equals(itemId).toArray())
+    .find((r) => r.deletedAt === null && r.userId === LOCAL_USER);
+}
+
+export function setReminder(db: AtelierDB, itemId: string, remindAt: Iso): Promise<Reminder> {
+  return tx(db, async () => {
+    const now = clock.now();
+    await live<Item>(db, 'items', itemId);
+    const cur = await liveReminder(db, itemId);
+    if (cur) return save(db, 'reminders', { ...cur, remindAt, remindedAt: null, ...stamp(now) }, now);
+    return save(db, 'reminders', { ...base(now), itemId, userId: LOCAL_USER, remindAt, remindedAt: null }, now);
+  });
+}
+
+export function clearReminder(db: AtelierDB, itemId: string): Promise<void> {
+  return tx(db, async () => {
+    const now = clock.now();
+    const cur = await liveReminder(db, itemId);
+    if (cur) await save(db, 'reminders', { ...cur, deletedAt: now, ...stamp(now) }, now);
   });
 }

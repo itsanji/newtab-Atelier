@@ -1,9 +1,14 @@
 import { useRef, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import type { Item } from '@atelier/core';
 import { useDb } from '../data/DbContext';
 import { deleteItem, updateItem } from '../data/repo';
 import { Menu } from '../ui/components/Menu';
 import { Icon } from '../ui/components/Icon';
+import { Tag } from '../ui/components/Tag';
+import { liveReminders } from '../data/queries';
+import { ReminderPicker } from './ReminderPicker';
+import { reminderLabel } from './reminderTime';
 import { InlineNameField } from './InlineNameField';
 import { useRun } from './Notice';
 import { removeAndRefocus } from './removeItem';
@@ -15,11 +20,15 @@ export function TodoItem({ item }: { item: Item }) {
   const row = useRef<HTMLDivElement | null>(null);
   const dnd = useSortableItem(item, false);
   const [editing, setEditing] = useState(false);
+  const reminder = useLiveQuery(
+    async () => (await liveReminders(db)).find((r) => r.itemId === item.id) ?? null,
+    [db, item.id],
+  );
 
   const remove = () => removeAndRefocus(row.current, () => run(deleteItem(db, item.id)));
 
   return (
-    <div className="atl-item atl-todo" ref={(el) => { row.current = el; dnd.setNodeRef(el); }} style={dnd.style}>
+    <div className="atl-item atl-todo" data-item-id={item.id} ref={(el) => { row.current = el; dnd.setNodeRef(el); }} style={dnd.style}>
       {dnd.handle}
       {editing ? (
         <InlineNameField
@@ -40,11 +49,16 @@ export function TodoItem({ item }: { item: Item }) {
             onChange={(e) => void run(updateItem(db, item.id, { done: e.target.checked }))}
           />
           <span className={item.done ? 'atl-todo-done' : undefined}>{item.title}</span>
-          {/* Reminder tag slot (Task 9) */}
+          {reminder && !item.done && reminder.remindedAt === null && (
+            <Tag tone={Date.parse(reminder.remindAt) <= Date.now() ? 'rose' : 'ochre'}>
+              {reminderLabel(reminder.remindAt, new Date())}
+            </Tag>
+          )}
         </label>
       )}
       {!editing && (
         <div className="atl-item-menu">
+          <ReminderPicker itemId={item.id} hasReminder={!!reminder && reminder.remindedAt === null} />
           <Menu
             trigger={<Icon name="more" size={18} />}
             triggerLabel="To-do options"
