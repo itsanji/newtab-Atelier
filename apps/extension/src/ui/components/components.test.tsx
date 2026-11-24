@@ -106,3 +106,58 @@ test('chrome fake dispatches events', async () => {
   expect(fn).toHaveBeenCalledOnce();
   expect((await chrome.tabs.query({})).length).toBe(1);
 });
+
+describe('Menu keyboard and focus', () => {
+  const items = [
+    { label: 'One', onSelect: () => {} },
+    { label: 'Two', onSelect: () => {}, disabled: true },
+    { label: 'Three', onSelect: () => {} },
+  ];
+  test('focuses first item on open and arrows/Home/End move between enabled items', async () => {
+    const user = userEvent.setup();
+    render(<Menu trigger="Actions" items={items} />);
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    expect(screen.getByRole('menuitem', { name: 'One' })).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Three' })).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'One' })).toHaveFocus();
+    await user.keyboard('{ArrowUp}');
+    expect(screen.getByRole('menuitem', { name: 'Three' })).toHaveFocus();
+    await user.keyboard('{Home}');
+    expect(screen.getByRole('menuitem', { name: 'One' })).toHaveFocus();
+    await user.keyboard('{End}');
+    expect(screen.getByRole('menuitem', { name: 'Three' })).toHaveFocus();
+  });
+  test('Escape and select return focus to the trigger', async () => {
+    const user = userEvent.setup();
+    render(<Menu trigger="Actions" items={items} />);
+    const trigger = screen.getByRole('button', { name: 'Actions' });
+    await user.click(trigger);
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveFocus();
+    await user.click(trigger);
+    await user.click(screen.getByRole('menuitem', { name: 'Three' }));
+    expect(trigger).toHaveFocus();
+  });
+});
+
+describe('Dialog focus restoration', () => {
+  test('returns focus to the opener when closed', () => {
+    function Host({ open }: { open: boolean }) {
+      return (
+        <div>
+          <button>opener</button>
+          <Dialog open={open} title="T" onClose={() => {}}>x</Dialog>
+        </div>
+      );
+    }
+    const { rerender } = render(<Host open={false} />);
+    const opener = screen.getByRole('button', { name: 'opener' });
+    opener.focus();
+    rerender(<Host open />);
+    (document.activeElement as HTMLElement)?.blur();
+    rerender(<Host open={false} />);
+    expect(opener).toHaveFocus();
+  });
+});

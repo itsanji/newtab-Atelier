@@ -6,9 +6,14 @@ export function Dialog({ open, title, onClose, children }: { open: boolean; titl
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    if (open && !el.open) el.showModal();
-    if (!open && el.open) el.close();
+    if (!open || !el) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!el.open) el.showModal();
+    // The dialog unmounts when closed, so restore focus to whatever opened it.
+    return () => {
+      if (el.open) el.close();
+      if (opener?.isConnected) opener.focus();
+    };
   }, [open]);
 
   if (!open) return null;
