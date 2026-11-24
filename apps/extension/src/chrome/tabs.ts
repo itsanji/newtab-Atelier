@@ -5,10 +5,13 @@ import { createCategory, createItem, tx } from '../data/repo';
 
 const OWN_PAGES = ['chrome://newtab/', 'edge://newtab/', 'about:newtab', 'about:blank', 'chrome-extension://'];
 
-/** True for tabs worth keeping: not pinned, not a new tab page, not an extension page. */
+/**
+ * True for tabs worth keeping: not pinned, not a new tab page, not an extension page, and an
+ * http, https, file or ftp address (the only links an export can carry).
+ */
 export function isSavableTab(tab: chrome.tabs.Tab): boolean {
   const url = tab.url;
-  if (!url || tab.pinned) return false;
+  if (!url || tab.pinned || !isLinkUrl(url)) return false;
   if (OWN_PAGES.some((p) => url.startsWith(p))) return false;
   return !url.startsWith(chrome.runtime.getURL(''));
 }

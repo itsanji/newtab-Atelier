@@ -1,10 +1,24 @@
 import { z } from 'zod';
-import type { Category, Item, Reminder, Workspace } from './model';
+import { generateKeyBetween } from 'fractional-indexing';
+import { isLinkUrl, type Category, type Item, type Reminder, type Workspace } from './model';
 
-const iso = z.string();
+const iso = z.string().datetime({ offset: true });
+const uuid = z.string().uuid();
+
+/** A key fractional-indexing can build on; anything else would make later moves throw. */
+const sortKey = z.string().refine((key) => {
+  try {
+    generateKeyBetween(key, null);
+    return true;
+  } catch {
+    return false;
+  }
+}, 'Invalid sort key');
+
+const linkUrl = z.string().refine(isLinkUrl, 'Links must be http, https, file or ftp');
 
 const rowBase = {
-  id: z.string(),
+  id: uuid,
   createdAt: iso,
   updatedAt: iso,
   deletedAt: iso.nullable(),
@@ -16,28 +30,28 @@ const workspaceSchema = z.object({
   name: z.string(),
   emoji: z.string().nullable(),
   ownerId: z.string().nullable(),
-  sortKey: z.string(),
+  sortKey,
 });
 
 const tabGroupColorSchema = z.enum(['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange']);
 
 const categorySchema = z.object({
   ...rowBase,
-  workspaceId: z.string(),
+  workspaceId: uuid,
   name: z.string(),
   emoji: z.string().nullable(),
-  sortKey: z.string(),
+  sortKey,
   tabGroup: z.object({ title: z.string(), color: tabGroupColorSchema }).nullable(),
   shareToken: z.string().nullable(),
 });
 
 const itemSchema = z.object({
   ...rowBase,
-  categoryId: z.string(),
+  categoryId: uuid,
   kind: z.enum(['link', 'note', 'todo']),
-  sortKey: z.string(),
+  sortKey,
   title: z.string(),
-  url: z.string().nullable(),
+  url: linkUrl.nullable(),
   faviconUrl: z.string().nullable(),
   note: z.string().nullable(),
   body: z.unknown().nullable(),
@@ -46,7 +60,7 @@ const itemSchema = z.object({
 
 const reminderSchema = z.object({
   ...rowBase,
-  itemId: z.string(),
+  itemId: uuid,
   userId: z.string(),
   remindAt: iso,
   remindedAt: iso.nullable(),

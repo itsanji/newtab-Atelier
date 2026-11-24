@@ -21,7 +21,7 @@ describe('isSavableTab', () => {
     const t = (o: object) => o as chrome.tabs.Tab;
     expect(isSavableTab(t({ url: 'https://a.com', pinned: false }))).toBe(true);
     expect(isSavableTab(t({ url: 'https://a.com', pinned: true }))).toBe(false);
-    for (const url of ['chrome://newtab/', 'edge://newtab/', 'about:newtab', 'about:blank', 'chrome-extension://abc/x.html', chrome.runtime.getURL('newtab.html'), undefined]) {
+    for (const url of ['chrome://settings/', 'javascript:void(0)', 'chrome://newtab/', 'edge://newtab/', 'about:newtab', 'about:blank', 'chrome-extension://abc/x.html', chrome.runtime.getURL('newtab.html'), undefined]) {
       expect(isSavableTab(t({ url, pinned: false }))).toBe(false);
     }
   });

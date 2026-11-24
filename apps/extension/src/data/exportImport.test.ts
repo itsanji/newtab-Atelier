@@ -60,11 +60,24 @@ test('import rejects invalid file and writes nothing', async () => {
   const file = await exportAll(src);
   await populate(db);
   const before = await snapshot(db);
-  const bad = { ...file, items: [...file.items, { ...file.items[0]!, id: 'x', kind: 'bogus' }] };
+  const bad = { ...file, items: [...file.items, { ...file.items[0]!, id: crypto.randomUUID(), kind: 'bogus' }] };
   await expect(importFile(db, bad)).rejects.toThrow(new ImportError('This export has damaged entries'));
   await expect(importFile(db, { ...file, format: 'other' })).rejects.toThrow("This file isn't an Atelier export");
   await expect(importFile(db, { ...file, version: 2 })).rejects.toThrow("This file isn't an Atelier export");
   await expect(importFile(db, null)).rejects.toThrow(ImportError);
+  expect(await snapshot(db)).toEqual(before);
+});
+
+test('import rejects an entry with a bad sort key and leaves tables and outbox unchanged', async () => {
+  const src = openDb('test-' + crypto.randomUUID());
+  await populate(src);
+  const file = await exportAll(src);
+  await populate(db);
+  const before = await snapshot(db);
+  const bad = { ...file, items: file.items.map((i, n) => (n === 0 ? { ...i, sortKey: 'not a key!' } : i)) };
+  await expect(importFile(db, bad)).rejects.toThrow(new ImportError('This export has damaged entries'));
+  const badUrl = { ...file, items: file.items.map((i, n) => (n === 0 ? { ...i, url: 'javascript:alert(1)' } : i)) };
+  await expect(importFile(db, badUrl)).rejects.toThrow(new ImportError('This export has damaged entries'));
   expect(await snapshot(db)).toEqual(before);
 });
 
@@ -97,7 +110,7 @@ test('orphan items land in Imported', async () => {
   expect((await liveItems(db, ic!.id)).map((i) => i.id)).toEqual([a.id, b.id]);
   // reminder survives with its item; a second orphan import reuses Imported
   expect(await db.reminders.count()).toBe(1);
-  await importFile(db, { ...orphans, items: [{ ...orphans.items[0]!, id: 'other' }] });
+  await importFile(db, { ...orphans, items: [{ ...orphans.items[0]!, id: crypto.randomUUID() }] });
   expect(await liveWorkspaces(db)).toHaveLength(1);
 });
 
@@ -107,7 +120,7 @@ test('orphan categories land in the Imported workspace; reminders without items 
   const file = await exportAll(src);
   const res = await importFile(db, {
     ...file, workspaces: [], items: [],
-    reminders: file.reminders.map((r) => ({ ...r, itemId: r.itemId === a.id ? 'missing' : r.itemId })),
+    reminders: file.reminders.map((r) => ({ ...r, itemId: r.itemId === a.id ? crypto.randomUUID() : r.itemId })),
   });
   expect(res).toEqual({ added: 1, updated: 0, skipped: 1 });
   const [ws] = await liveWorkspaces(db);
