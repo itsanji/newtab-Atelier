@@ -5,5 +5,6 @@ import manifest from './manifest.config';
 
 export default defineConfig({
   plugins: [react(), crx({ manifest })],
-  build: { outDir: 'dist', emptyOutDir: true },
+  // An e2e build (ATELIER_E2E=1) goes to its own folder, so `dist` never carries the test host permission.
+  build: { outDir: process.env.ATELIER_E2E === '1' ? 'dist-e2e' : 'dist', emptyOutDir: true },
 });

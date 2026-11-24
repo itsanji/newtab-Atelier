@@ -29,7 +29,7 @@ docker compose up -d
 curl http://localhost:8787/health   # ok
 ```
 
-The server applies its database migrations on startup. Put the server address in the extension's sync settings and create an account.
+The server applies its database migrations on startup. Then, in the extension's board sidebar, choose Connect a server, enter the server address and create an account.
 
 ## HTTPS with Caddy
 

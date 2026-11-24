@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist');
+const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist-e2e');
 const executablePath = process.env.ATELIER_CHROMIUM ?? '/usr/bin/chromium';
 const TEST_URL = 'http://atelier.test/';
 
