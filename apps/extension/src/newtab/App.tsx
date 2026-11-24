@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { openDb, type AtelierDB } from '../data/db';
 import { DbProvider } from '../data/DbContext';
+import { buildIndex, search } from '../data/search';
+import { SearchResults } from '../board/SearchResults';
 import { getMeta, liveWorkspaces, setMeta } from '../data/queries';
 import { ensureSeed } from '../data/seed';
 import { NoticeProvider, useRun } from '../board/Notice';
@@ -20,6 +22,16 @@ function Shell({ db }: { db: AtelierDB }) {
   // `null` means "no choice stored"; `undefined` means "still loading".
   const stored = useLiveQuery(async () => (await getMeta<string>(db, SELECTED_KEY)) ?? null, [db]);
   const highlight = useHighlightItem();
+  const [query, setQuery] = useState('');
+  const rows = useLiveQuery(async () => ({
+    workspaces: await db.workspaces.filter((r) => r.deletedAt === null).toArray(),
+    categories: await db.categories.filter((r) => r.deletedAt === null).toArray(),
+    items: await db.items.filter((r) => r.deletedAt === null).toArray(),
+  }), [db]);
+  const index = useMemo(() => (rows ? buildIndex(rows) : null), [rows]);
+  const trimmed = query.trim();
+  const hits = useMemo(() => (index && trimmed ? search(index, trimmed) : []), [index, trimmed]);
+  const urls = useMemo(() => new Map((rows?.items ?? []).flatMap((i) => (i.url ? [[i.id, i.url] as const] : []))), [rows]);
   const focused = useRef(false);
   useEffect(() => {
     if (focused.current) return;
@@ -46,8 +58,20 @@ function Shell({ db }: { db: AtelierDB }) {
     <div className="atl-shell">
       <Sidebar workspaces={workspaces} selectedId={selected.id} onSelect={(id) => void run(setMeta(db, SELECTED_KEY, id))} />
       <main className="atl-main">
-        <BoardHeader workspace={selected} />
-        <Board key={selected.id} workspace={selected} />
+        <BoardHeader workspace={selected} query={query} onQueryChange={setQuery} />
+        {trimmed ? (
+          <SearchResults
+            query={trimmed}
+            hits={hits}
+            urls={urls}
+            onPick={(hit) => {
+              setQuery('');
+              void run(setMeta(db, SELECTED_KEY, hit.workspaceId)).then(() => highlight(hit.itemId));
+            }}
+          />
+        ) : (
+          <Board key={selected.id} workspace={selected} />
+        )}
       </main>
     </div>
     </BoardDnd>

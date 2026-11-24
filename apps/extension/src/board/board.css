@@ -120,3 +120,9 @@ a { color: var(--lily); }
 .atl-reminder { display: inline-flex; }
 .atl-reminder-pop { display: flex; flex-direction: column; gap: var(--space-1); min-width: 220px; }
 .atl-reminder-custom { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2); }
+
+.atl-results { display: flex; flex-direction: column; gap: var(--space-3); max-width: 640px; }
+.atl-results-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.atl-result { width: 100%; font: inherit; text-align: left; border: 0; background: transparent; cursor: pointer; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2); }
+.atl-results-empty { margin: 0; color: var(--ink-muted); }
+.atl-search { min-width: 280px; }
