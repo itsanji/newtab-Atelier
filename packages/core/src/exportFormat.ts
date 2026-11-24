@@ -1,0 +1,73 @@
+import { z } from 'zod';
+import type { Category, Item, Reminder, Workspace } from './model';
+
+const iso = z.string();
+
+const rowBase = {
+  id: z.string(),
+  createdAt: iso,
+  updatedAt: iso,
+  deletedAt: iso.nullable(),
+  updatedBy: z.string().nullable(),
+};
+
+const workspaceSchema = z.object({
+  ...rowBase,
+  name: z.string(),
+  emoji: z.string().nullable(),
+  ownerId: z.string().nullable(),
+  sortKey: z.string(),
+});
+
+const tabGroupColorSchema = z.enum(['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange']);
+
+const categorySchema = z.object({
+  ...rowBase,
+  workspaceId: z.string(),
+  name: z.string(),
+  emoji: z.string().nullable(),
+  sortKey: z.string(),
+  tabGroup: z.object({ title: z.string(), color: tabGroupColorSchema }).nullable(),
+  shareToken: z.string().nullable(),
+});
+
+const itemSchema = z.object({
+  ...rowBase,
+  categoryId: z.string(),
+  kind: z.enum(['link', 'note', 'todo']),
+  sortKey: z.string(),
+  title: z.string(),
+  url: z.string().nullable(),
+  faviconUrl: z.string().nullable(),
+  note: z.string().nullable(),
+  body: z.unknown().nullable(),
+  done: z.boolean(),
+});
+
+const reminderSchema = z.object({
+  ...rowBase,
+  itemId: z.string(),
+  userId: z.string(),
+  remindAt: iso,
+  remindedAt: iso.nullable(),
+});
+
+export const exportFileSchema = z.object({
+  format: z.literal('atelier'),
+  version: z.literal(1),
+  exportedAt: iso,
+  workspaces: z.array(workspaceSchema),
+  categories: z.array(categorySchema),
+  items: z.array(itemSchema),
+  reminders: z.array(reminderSchema),
+});
+
+export type ExportFile = {
+  format: 'atelier';
+  version: 1;
+  exportedAt: string;
+  workspaces: Workspace[];
+  categories: Category[];
+  items: Item[];
+  reminders: Reminder[];
+};
