@@ -13,6 +13,7 @@ import { Icon } from '../ui/components/Icon';
 import { IconButton } from '../ui/components/IconButton';
 import { useRun } from './Notice';
 import { AddItemMenu } from './AddItemMenu';
+import { CategoryNameContext } from './dnd';
 import { ItemRow } from './ItemRow';
 import { NoteItem } from './NoteItem';
 import { TodoItem } from './TodoItem';
@@ -67,6 +68,7 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
           ]}
         />
       </div>
+      <CategoryNameContext.Provider value={category.name}>
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
       {items.map((item) => {
         if (item.kind === 'link') return <ItemRow key={item.id} item={item} />;
@@ -75,6 +77,7 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
         return null;
       })}
       </SortableContext>
+      </CategoryNameContext.Provider>
       <div className="atl-column-foot">
         <AddItemMenu categoryId={category.id} onCreated={setFreshNote} />
         <button type="button" className="atl-textlink" onClick={() => onOpenAll?.()}>Open all</button>

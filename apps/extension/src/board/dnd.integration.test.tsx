@@ -5,7 +5,7 @@ import { openDb, type AtelierDB } from '../data/db';
 import { createCategory, createItem, createWorkspace } from '../data/repo';
 import { liveCategories, liveItems, liveWorkspaces } from '../data/queries';
 import { ensureSeed } from '../data/seed';
-import { applyDrop } from './dnd';
+import { announcements, applyDrop } from './dnd';
 import { installChromeFake } from '../../test/chromeFake';
 
 let db: AtelierDB;
@@ -82,5 +82,43 @@ describe('drag handles', () => {
     const col = await screen.findByRole('region', { name: 'Reading list' });
     expect(await within(col).findByRole('button', { name: 'Drag to move' })).toBeInTheDocument();
     expect(within(col).getByRole('button', { name: 'Drag to reorder category' })).toBeInTheDocument();
+  });
+});
+
+describe('no-op drops', () => {
+  const outbox = () => db.outbox.count();
+  test('same-position item drops do not write', async () => {
+    const { a, mk } = await setup();
+    const x = await mk(a.id, 'x');
+    const y = await mk(a.id, 'y');
+    const z = await mk(a.id, 'z');
+    const n = await outbox();
+    // before its own next sibling
+    await applyDrop(db, { active: { type: 'item', id: x.id }, over: { type: 'item', id: y.id }, placement: 'before' });
+    // after its own previous sibling
+    await applyDrop(db, { active: { type: 'item', id: z.id }, over: { type: 'item', id: y.id }, placement: 'after' });
+    // last item onto its own column (append)
+    await applyDrop(db, { active: { type: 'item', id: z.id }, over: { type: 'category', id: a.id }, placement: 'after' });
+    expect(await outbox()).toBe(n);
+    expect(await titles(a.id)).toEqual(['x', 'y', 'z']);
+  });
+  test('same-position category drop does not write', async () => {
+    const { a, b } = await setup();
+    const n = await outbox();
+    await applyDrop(db, { active: { type: 'category', id: a.id }, over: { type: 'category', id: b.id }, placement: 'before' });
+    await applyDrop(db, { active: { type: 'category', id: b.id }, over: { type: 'category', id: a.id }, placement: 'after' });
+    expect(await outbox()).toBe(n);
+  });
+});
+
+describe('announcements', () => {
+  const act = { id: 'x', data: { current: { type: 'item', title: 'Example' } } };
+  const over = { id: 'p', data: { current: { type: 'item', title: 'Other link', categoryName: 'Reading list' } } };
+  test('name the category, not the over item', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const a = announcements as any;
+    expect(a.onDragStart({ active: act })).toBe('Picked up Example.');
+    expect(a.onDragEnd({ active: act, over })).toBe('Moved Example to Reading list.');
+    expect(a.onDragOver({ active: act, over })).toBe('Example is over Reading list.');
   });
 });

@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type PointerEventHandler, type ReactNode } from 'react';
+import { createContext, useContext, useState, type CSSProperties, type PointerEventHandler, type ReactNode } from 'react';
 import {
   DndContext, DragOverlay, KeyboardSensor, PointerSensor, pointerWithin, closestCorners, useSensor, useSensors,
   type Active, type Announcements, type CollisionDetection, type DragEndEvent, type DragStartEvent, type Over,
@@ -12,9 +12,10 @@ import { liveCategories, liveItems } from '../data/queries';
 import { moveCategory, moveItem } from '../data/repo';
 import { IconButton } from '../ui/components/IconButton';
 import { useNotify, useRun } from './Notice';
+import { domainOf } from './url';
 
 export type Placement = 'before' | 'after';
-export type DragType = 'item' | 'category' | 'tab' | 'workspace' | 'column';
+export type DragType = 'item' | 'category' | 'tab' | 'workspace';
 
 export function computeItemDrop(
   target: { categoryId: string; overItemId: string | null; placement: Placement },
@@ -61,8 +62,13 @@ export async function applyDrop(db: AtelierDB, { active, over, placement }: Drop
       if (!first) return 'Add a category to that workspace first';
       categoryId = first.id;
     } else return null;
-    const siblings = (await liveItems(db, categoryId)).filter((s) => s.id !== active.id);
-    await moveItem(db, active.id, computeItemDrop({ categoryId, overItemId, placement }, siblings));
+    const all = await liveItems(db, categoryId);
+    const siblings = all.filter((s) => s.id !== active.id);
+    const target = computeItemDrop({ categoryId, overItemId, placement }, siblings);
+    const at = all.findIndex((s) => s.id === active.id);
+    // Same category with the same neighbours means nothing moves: skip the write.
+    if (at >= 0 && target.beforeId === (all[at - 1]?.id ?? null) && target.afterId === (all[at + 1]?.id ?? null)) return null;
+    await moveItem(db, active.id, target);
     return null;
   }
 
@@ -71,12 +77,15 @@ export async function applyDrop(db: AtelierDB, { active, over, placement }: Drop
     if (!cat || cat.deletedAt !== null) return null;
     const siblings = (await liveCategories(db, cat.workspaceId)).filter((s) => s.id !== active.id);
     const { beforeId, afterId } = computeCategoryDrop(over.id, placement, siblings);
+    const all = await liveCategories(db, cat.workspaceId);
+    const at = all.findIndex((s) => s.id === active.id);
+    if (at >= 0 && beforeId === (all[at - 1]?.id ?? null) && afterId === (all[at + 1]?.id ?? null)) return null;
     await moveCategory(db, active.id, beforeId, afterId);
   }
   return null;
 }
 
-type DragData = { type?: DragType; title?: string };
+type DragData = { type?: DragType; title?: string; categoryName?: string };
 
 const collisions: CollisionDetection = (args) => {
   const type = (args.active.data.current as DragData | undefined)?.type;
@@ -103,9 +112,13 @@ function placementOf(active: Active, over: Over, axis: 'x' | 'y'): Placement {
 }
 
 const titleOf = (e: { data: { current?: unknown } }) => (e.data.current as DragData | undefined)?.title ?? 'item';
-const overTitle = (over: Over | null) => (over ? ((over.data.current as DragData | undefined)?.title ?? 'that place') : null);
+/** Name of the place an item would land: the category for items and columns, the workspace for sidebar rows. */
+const overTitle = (over: Over | null) => {
+  const d = over?.data.current as DragData | undefined;
+  return d?.type === 'item' ? (d.categoryName ?? 'that category') : (d?.title ?? 'that place');
+};
 
-const announcements: Announcements = {
+export const announcements: Announcements = {
   onDragStart: ({ active }) => `Picked up ${titleOf(active)}.`,
   onDragOver: ({ active, over }) => (over ? `${titleOf(active)} is over ${overTitle(over)}.` : undefined),
   onDragEnd: ({ active, over }) => (over ? `Moved ${titleOf(active)} to ${overTitle(over)}.` : `Dropped ${titleOf(active)}.`),
@@ -151,8 +164,12 @@ export function BoardDnd({ children }: { children: ReactNode }) {
 }
 
 /** Sortable wiring for an item row: `rowProps` go on the row, `handle` renders the grip. */
+export const CategoryNameContext = createContext('');
+
 export function useSortableItem(item: Item, pointerOnRow: boolean) {
-  const s = useSortable({ id: item.id, data: { type: 'item', title: item.title || 'note', categoryId: item.categoryId } });
+  const categoryName = useContext(CategoryNameContext);
+  const label = item.title || (item.kind === 'link' ? domainOf(item.url ?? '') : '') || (item.kind === 'note' ? 'note' : 'item');
+  const s = useSortable({ id: item.id, data: { type: 'item', title: label, categoryId: item.categoryId, categoryName } });
   const style: CSSProperties = { transform: CSS.Translate.toString(s.transform), transition: s.transition, opacity: s.isDragging ? 0.4 : undefined };
   const handle = (
     <IconButton
