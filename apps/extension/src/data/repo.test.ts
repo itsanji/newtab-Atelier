@@ -95,3 +95,9 @@ test('updateItem bumps updatedAt and keeps createdAt', async () => {
   expect(got.createdAt).toBe(a.createdAt);
   expect(got.updatedAt > a.updatedAt).toBe(true);
 });
+
+test('concurrent ensureSeed seeds exactly once', async () => {
+  await Promise.all([ensureSeed(db), ensureSeed(db)]);
+  expect(await db.workspaces.count()).toBe(1);
+  expect(await db.categories.count()).toBe(2);
+});

@@ -42,7 +42,7 @@ function base(now: string) {
 }
 
 const stamp = (now: string) => ({ updatedAt: now, updatedBy: LOCAL_USER });
-const tx = <T>(db: AtelierDB, fn: () => Promise<T>) =>
+export const tx = <T>(db: AtelierDB, fn: () => Promise<T>) =>
   db.transaction('rw', [db.workspaces, db.categories, db.items, db.reminders, db.outbox], fn);
 
 async function keyFor<S extends { id: string; sortKey: string }>(
