@@ -5,6 +5,7 @@ import { DbProvider } from '../data/DbContext';
 import { buildIndex, search } from '../data/search';
 import { SearchResults } from '../board/SearchResults';
 import { getMeta, liveWorkspaces, setMeta } from '../data/queries';
+import { useTheme } from '../data/settings';
 import { ensureSeed } from '../data/seed';
 import { NoticeProvider, useRun } from '../board/Notice';
 import { Board } from '../board/Board';
@@ -17,6 +18,7 @@ const SELECTED_KEY = 'selectedWorkspaceId';
 let defaultDb: AtelierDB | undefined;
 
 function Shell({ db }: { db: AtelierDB }) {
+  useTheme();
   const run = useRun();
   const workspaces = useLiveQuery(() => liveWorkspaces(db), [db]);
   // `null` means "no choice stored"; `undefined` means "still loading".

@@ -4,6 +4,7 @@ import { openDb, type AtelierDB } from '../data/db';
 import { DbProvider, useDb } from '../data/DbContext';
 import { getMeta, liveCategories, liveWorkspaces, setMeta } from '../data/queries';
 import { createCategory, createItem } from '../data/repo';
+import { useTheme } from '../data/settings';
 import { ensureSeed } from '../data/seed';
 import { LAST_CATEGORY_KEY } from '../data/target';
 import { faviconUrl } from '../chrome/favicon';
@@ -51,6 +52,7 @@ async function load(db: AtelierDB): Promise<Loaded> {
 const hostPath = (url: string) => url.replace(/^https?:\/\//, '');
 
 function PopupBody({ initial }: { initial: Loaded }) {
+  useTheme();
   const db = useDb();
   const run = useRun();
   const { tab, workspace } = initial;

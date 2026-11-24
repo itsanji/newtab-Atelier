@@ -29,3 +29,17 @@ if (typeof Range !== 'undefined') {
 }
 if (typeof Element !== 'undefined') Element.prototype.getClientRects ??= noRects;
 if (typeof document !== 'undefined') document.elementFromPoint ??= () => null;
+
+// Some Node/jsdom combinations expose no usable localStorage; provide an in-memory one.
+if (typeof document !== 'undefined' && typeof globalThis.localStorage?.clear !== 'function') {
+  const data = new Map<string, string>();
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, String(v)),
+      removeItem: (k: string) => void data.delete(k),
+      clear: () => data.clear(),
+    },
+  });
+}

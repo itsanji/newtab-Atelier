@@ -8,6 +8,7 @@ import { Dialog } from '../ui/components/Dialog';
 import { Field } from '../ui/components/Field';
 import { Icon } from '../ui/components/Icon';
 import { Menu } from '../ui/components/Menu';
+import { EmojiPicker } from './EmojiPicker';
 import { useRun } from './Notice';
 import { InlineNameField } from './InlineNameField';
 import { useSavedCount } from './useSavedCount';
@@ -27,7 +28,7 @@ function WorkspaceRow({
   return (
     <div ref={drop.setNodeRef} className={['atl-ws', selected && 'atl-ws-active', drop.isOver && 'atl-ws-over'].filter(Boolean).join(' ')}>
       <button type="button" className="atl-ws-btn" aria-current={selected ? 'page' : undefined} onClick={onSelect}>
-        <span>{ws.emoji ? `${ws.emoji} ` : ''}{ws.name}</span>
+        <span>{ws.emoji && <span aria-hidden="true">{ws.emoji} </span>}{ws.name}</span>
         <span className="atl-ws-count">{count}</span>
       </button>
       <Menu
@@ -51,7 +52,10 @@ function WorkspaceRow({
           }}
         >
           <Field label="Name" value={name} error={nameError} autoFocus onChange={(e) => { setName(e.target.value); setNameError(undefined); }} />
-          <Field label="Emoji" hint="Optional" value={emoji} onChange={(e) => setEmoji(e.target.value)} />
+          <div className="atl-emoji-row">
+            <span className="im-label">Emoji (optional)</span>
+            <EmojiPicker value={emoji || null} onChange={(e) => setEmoji(e ?? '')} />
+          </div>
           <div className="atl-form-actions">
             <Button type="submit">Save workspace</Button>
             <Button type="button" variant="ghost" onClick={() => setDialog(null)}>Cancel</Button>

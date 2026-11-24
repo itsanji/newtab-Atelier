@@ -11,6 +11,7 @@ import { InlineNameField } from './InlineNameField';
 import { Menu } from '../ui/components/Menu';
 import { Icon } from '../ui/components/Icon';
 import { IconButton } from '../ui/components/IconButton';
+import { EmojiPicker } from './EmojiPicker';
 import { useRun } from './Notice';
 import { AddItemMenu } from './AddItemMenu';
 import { CategoryNameContext } from './dnd';
@@ -41,7 +42,7 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
     <section className="atl-column" ref={(el) => { section.current = el; sort.setNodeRef(el); }} style={style} aria-label={category.name}>
       <div className="atl-column-head">
         <IconButton label="Drag to reorder category" icon="grip" className="atl-grip" ref={sort.setActivatorNodeRef} {...sort.attributes} {...sort.listeners} />
-        {category.emoji && <span aria-hidden="true">{category.emoji}</span>}
+        <EmojiPicker value={category.emoji} onChange={(emoji) => void run(updateCategory(db, category.id, { emoji }))} />
         {renaming ? (
           <InlineNameField
             label="Category name"

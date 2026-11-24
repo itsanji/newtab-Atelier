@@ -1,5 +1,7 @@
 import type { Workspace } from '@atelier/core';
 import { useEffect } from 'react';
+import { IconButton } from '../ui/components/IconButton';
+import { useTheme } from '../data/settings';
 import { Field } from '../ui/components/Field';
 import { useSavedCount } from './useSavedCount';
 
@@ -9,6 +11,9 @@ export function BoardHeader({
   workspace, query, onQueryChange,
 }: { workspace: Workspace; query: string; onQueryChange(q: string): void }) {
   const saved = useSavedCount(workspace.id);
+  const { pref, resolved, cycle } = useTheme();
+  const themeName = pref === 'system' ? 'System' : pref === 'nocturne' ? 'Nocturne' : 'Giverny';
+  const themeIcon = pref === 'system' ? 'contrast' : resolved === 'nocturne' ? 'sun' : 'moon';
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -40,6 +45,7 @@ export function BoardHeader({
             onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); onQueryChange(''); } }}
           />
         </div>
+        <IconButton label={`Theme: ${themeName}`} icon={themeIcon} onClick={() => void cycle()} />
         <div data-slot="share" hidden />
       </div>
     </header>
