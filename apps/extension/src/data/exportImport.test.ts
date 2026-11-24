@@ -73,12 +73,14 @@ test('newer incoming replaces, older or equal is skipped, tombstones are not res
   const file = await exportAll(db);
   await deleteItem(db, b.id);
   const newer = { ...file, items: file.items.map((i) => (i.id === a.id ? { ...i, title: 'a2', updatedAt: '2030-01-01T00:00:00.000Z' } : i)) };
-  const outbox = await db.outbox.count();
+  const last = (await db.outbox.orderBy('seq').last())!.seq;
   const res = await importFile(db, newer);
   expect(res.updated).toBe(1);
   expect((await db.items.get(a.id))!.title).toBe('a2');
   expect((await db.items.get(b.id))!.deletedAt).not.toBeNull();
-  expect(await db.outbox.count()).toBe(outbox + 1);
+  const queued = await db.outbox.where('seq').above(last).toArray();
+  expect(queued.map((e) => e.key)).toEqual([`items:${a.id}`]);
+  expect((queued[0]!.row as { title: string }).title).toBe('a2');
 });
 
 test('orphan items land in Imported', async () => {

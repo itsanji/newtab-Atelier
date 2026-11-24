@@ -1,5 +1,5 @@
 import { keyBetween, type Category, type Item, type Iso, type Reminder, type TableName, type Workspace } from '@atelier/core';
-import { LOCAL_USER, type AtelierDB } from './db';
+import { enqueue, LOCAL_USER, type AtelierDB } from './db';
 import { liveCategories, liveItems, liveWorkspaces } from './queries';
 
 export const clock = { now: (): string => new Date().toISOString() };
@@ -20,14 +20,10 @@ export class NotFoundError extends Error {
 
 export type Row = { id: string; deletedAt: string | null; updatedAt: string; updatedBy: string | null };
 
-async function queue(db: AtelierDB, table: TableName, row: Row, now: string): Promise<void> {
-  await db.outbox.add({ table, rowId: row.id, row: { ...row }, queuedAt: now });
-}
-
 /** Write a changed row and its outbox entry. Call inside a transaction. */
 export async function save<R extends Row>(db: AtelierDB, table: TableName, row: R, now: string): Promise<R> {
   await db.table(table).put(row);
-  await queue(db, table, row, now);
+  await enqueue(db, table, row, now);
   return row;
 }
 
@@ -41,7 +37,7 @@ function base(now: string) {
   return { id: crypto.randomUUID(), createdAt: now, updatedAt: now, deletedAt: null, updatedBy: LOCAL_USER };
 }
 
-const stamp = (now: string) => ({ updatedAt: now, updatedBy: LOCAL_USER });
+export const stamp = (now: string) => ({ updatedAt: now, updatedBy: LOCAL_USER });
 export const tx = <T>(db: AtelierDB, fn: () => Promise<T>) =>
   db.transaction('rw', [db.workspaces, db.categories, db.items, db.reminders, db.outbox], fn);
 
@@ -50,6 +46,8 @@ async function keyFor<S extends { id: string; sortKey: string }>(
 ): Promise<string> {
   const before = beforeId ? await live<S & Row>(db, table, beforeId) : null;
   const after = afterId ? await live<S & Row>(db, table, afterId) : null;
+  // Equal or inverted neighbour keys have no room between them: place it right after `before` instead.
+  if (before && after && before.sortKey >= after.sortKey) return keyBetween(before.sortKey, null);
   return keyBetween(before?.sortKey ?? null, after?.sortKey ?? null);
 }
 
@@ -106,15 +104,20 @@ export function deleteWorkspace(db: AtelierDB, id: string): Promise<void> {
 // Categories
 
 export function createCategory(
-  db: AtelierDB, input: { workspaceId: string; name: string; emoji?: string | null; tabGroup?: Category['tabGroup'] },
+  db: AtelierDB,
+  input: { workspaceId: string; name: string; emoji?: string | null; tabGroup?: Category['tabGroup'] },
+  opts: { position?: 'start' | 'end' } = {},
 ): Promise<Category> {
   return tx(db, async () => {
     const now = clock.now();
     await live<Workspace>(db, 'workspaces', input.workspaceId);
-    const last = (await liveCategories(db, input.workspaceId)).at(-1);
+    const siblings = await liveCategories(db, input.workspaceId);
+    const sortKey = opts.position === 'start'
+      ? keyBetween(null, siblings[0]?.sortKey ?? null)
+      : keyBetween(siblings.at(-1)?.sortKey ?? null, null);
     const row: Category = {
       ...base(now), workspaceId: input.workspaceId, name: input.name, emoji: input.emoji ?? null,
-      sortKey: keyBetween(last?.sortKey ?? null, null), tabGroup: input.tabGroup ?? null, shareToken: null,
+      sortKey, tabGroup: input.tabGroup ?? null, shareToken: null,
     };
     return save(db, 'categories', row, now);
   });
@@ -153,15 +156,19 @@ export function createItem(
   input: {
     id?: string; categoryId: string; kind: Item['kind']; title: string; url?: string | null; faviconUrl?: string | null;
     note?: string | null; body?: unknown; position?: 'start' | 'end';
+    /** Place between these neighbours (overrides `position`) when either is given. */
+    beforeId?: string | null; afterId?: string | null;
   },
 ): Promise<Item> {
   return tx(db, async () => {
     const now = clock.now();
     await live<Category>(db, 'categories', input.categoryId);
     const siblings = await liveItems(db, input.categoryId);
-    const sortKey = input.position === 'start'
-      ? keyBetween(null, siblings[0]?.sortKey ?? null)
-      : keyBetween(siblings.at(-1)?.sortKey ?? null, null);
+    const sortKey = input.beforeId !== undefined || input.afterId !== undefined
+      ? await keyFor(db, 'items', input.beforeId ?? null, input.afterId ?? null)
+      : input.position === 'start'
+        ? keyBetween(null, siblings[0]?.sortKey ?? null)
+        : keyBetween(siblings.at(-1)?.sortKey ?? null, null);
     const row: Item = {
       ...base(now), ...(input.id ? { id: input.id } : {}), categoryId: input.categoryId, kind: input.kind, sortKey, title: input.title,
       url: input.url ?? null, faviconUrl: input.faviconUrl ?? null, note: input.note ?? null,

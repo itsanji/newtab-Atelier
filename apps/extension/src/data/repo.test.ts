@@ -2,7 +2,7 @@ import { beforeEach, expect, test } from 'vitest';
 import { openDb, type AtelierDB } from './db';
 import {
   clock, createCategory, createItem, createWorkspace, deleteCategory, deleteWorkspace,
-  LastWorkspaceError, moveItem, updateItem,
+  LastWorkspaceError, moveItem, updateItem, updateCategory, moveCategory,
 } from './repo';
 import { ensureSeed } from './seed';
 import { liveCategories, liveItems, liveWorkspaces } from './queries';
@@ -21,15 +21,18 @@ async function setup() {
   return { ws, cat };
 }
 const item = (categoryId: string, title: string) => createItem(db, { categoryId, kind: 'link', title });
+/** Highest outbox seq so far, and the entries queued after it. */
+const lastSeq = async () => (await db.outbox.orderBy('seq').last())?.seq ?? 0;
+const since = async (seq: number) => db.outbox.where('seq').above(seq).sortBy('seq');
 
 test('createItem appends at end and writes one outbox entry', async () => {
   const { cat } = await setup();
-  const before = await db.outbox.count();
+  const before = await lastSeq();
   const a = await item(cat.id, 'a');
   const b = await item(cat.id, 'b');
   expect(b.sortKey > a.sortKey).toBe(true);
-  const rows = (await db.outbox.toArray()).slice(before);
-  expect(rows).toHaveLength(2);
+  const rows = await since(before);
+  expect(rows.map((r) => r.rowId)).toEqual([a.id, b.id]);
   expect(rows.every((r) => r.table === 'items')).toBe(true);
 });
 
@@ -38,9 +41,9 @@ test('moveItem between two items writes only the moved row', async () => {
   const a = await item(cat.id, 'a');
   const b = await item(cat.id, 'b');
   const c = await item(cat.id, 'c');
-  const before = await db.outbox.count();
+  const before = await lastSeq();
   await moveItem(db, b.id, { categoryId: cat.id, beforeId: a.id, afterId: c.id });
-  expect(await db.outbox.count()).toBe(before + 1);
+  expect((await since(before)).map((r) => r.rowId)).toEqual([b.id]);
   expect((await liveItems(db, cat.id)).map((i) => i.title)).toEqual(['a', 'b', 'c']);
   await moveItem(db, b.id, { categoryId: cat.id, beforeId: c.id, afterId: null });
   expect((await liveItems(db, cat.id)).map((i) => i.title)).toEqual(['a', 'c', 'b']);
@@ -61,9 +64,9 @@ test('deleteCategory tombstones its items and liveItems hides them', async () =>
   await item(cat.id, 'a');
   await item(cat.id, 'b');
   await item(cat.id, 'c');
-  const before = await db.outbox.count();
+  const before = await lastSeq();
   await deleteCategory(db, cat.id);
-  expect(await db.outbox.count()).toBe(before + 4);
+  expect(await since(before)).toHaveLength(4);
   expect(await liveItems(db, cat.id)).toHaveLength(0);
   expect((await db.items.toArray()).every((i) => i.deletedAt !== null)).toBe(true);
 });
@@ -108,4 +111,56 @@ test('createItem accepts a caller-supplied id', async () => {
   const row = await createItem(db, { id, categoryId: cat.id, kind: 'note', title: '' });
   expect(row.id).toBe(id);
   expect(await db.items.get(id)).toBeTruthy();
+});
+
+test('two updates to one row leave one outbox entry holding the latest snapshot', async () => {
+  const { cat } = await setup();
+  const a = await item(cat.id, 'a');
+  await updateItem(db, a.id, { title: 'b' });
+  await updateItem(db, a.id, { title: 'c' });
+  const entries = (await db.outbox.toArray()).filter((e) => e.rowId === a.id);
+  expect(entries).toHaveLength(1);
+  expect(entries[0]!.key).toBe(`items:${a.id}`);
+  expect((entries[0]!.row as { title: string }).title).toBe('c');
+  // The rewritten entry moves to the end of the upload order.
+  expect((await db.outbox.orderBy('seq').last())!.rowId).toBe(a.id);
+});
+
+test('outbox seq increases with every write', async () => {
+  const { cat } = await setup();
+  const a = await item(cat.id, 'a');
+  const s1 = (await db.outbox.get(`items:${a.id}`))!.seq;
+  await updateCategory(db, cat.id, { name: 'D' });
+  const s2 = (await db.outbox.get(`categories:${cat.id}`))!.seq;
+  expect(s2).toBeGreaterThan(s1);
+});
+
+test('moving between two items with equal sort keys succeeds and lands after the first', async () => {
+  const { cat } = await setup();
+  const a = await item(cat.id, 'a');
+  const b = await item(cat.id, 'b');
+  const c = await item(cat.id, 'c');
+  await db.items.update(b.id, { sortKey: a.sortKey });
+  await moveItem(db, c.id, { categoryId: cat.id, beforeId: a.id, afterId: b.id });
+  const moved = (await db.items.get(c.id))!;
+  expect(moved.sortKey > a.sortKey).toBe(true);
+});
+
+test('createCategory position start puts it first; default is last', async () => {
+  const { ws, cat } = await setup();
+  const last = await createCategory(db, { workspaceId: ws.id, name: 'End' });
+  const first = await createCategory(db, { workspaceId: ws.id, name: 'Start' }, { position: 'start' });
+  expect((await liveCategories(db, ws.id)).map((c) => c.id)).toEqual([first.id, cat.id, last.id]);
+  await moveCategory(db, first.id, last.id, null);
+  expect((await liveCategories(db, ws.id)).at(-1)!.id).toBe(first.id);
+});
+
+test('createItem with neighbours places it between them in one write', async () => {
+  const { cat } = await setup();
+  const a = await item(cat.id, 'a');
+  const b = await item(cat.id, 'b');
+  const before = await lastSeq();
+  const x = await createItem(db, { categoryId: cat.id, kind: 'link', title: 'x', beforeId: a.id, afterId: b.id });
+  expect((await liveItems(db, cat.id)).map((i) => i.title)).toEqual(['a', 'x', 'b']);
+  expect((await since(before)).map((r) => r.rowId)).toEqual([x.id]);
 });

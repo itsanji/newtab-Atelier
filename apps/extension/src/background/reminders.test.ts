@@ -35,8 +35,20 @@ describe('syncAlarms', () => {
   });
 });
 
+describe('syncAlarms with a damaged reminder', () => {
+  test('skips a reminder whose remindAt is not a time and still schedules the others', async () => {
+    const a = await todo('a');
+    const b = await todo('b');
+    await setReminder(db, a.id, future);
+    const bad = await setReminder(db, b.id, future);
+    await db.reminders.update(bad.id, { remindAt: 'not a date' });
+    await expect(syncAlarms(db)).resolves.toBeUndefined();
+    expect((await fake.alarms.getAll()).map((x) => x.name)).toEqual([`reminder:${a.id}`]);
+  });
+});
+
 describe('reminders repo', () => {
-  test('setReminder replaces, clearReminder tombstones, one outbox entry per change', async () => {
+  test('setReminder replaces, clearReminder tombstones, outbox keeps one latest entry for the row', async () => {
     const a = await todo('a');
     const before = await db.outbox.count();
     const r1 = await setReminder(db, a.id, future);
@@ -45,7 +57,9 @@ describe('reminders repo', () => {
     expect(await db.reminders.count()).toBe(1);
     await clearReminder(db, a.id);
     expect((await db.reminders.get(r1.id))!.deletedAt).not.toBeNull();
-    expect(await db.outbox.count()).toBe(before + 3);
+    expect(await db.outbox.count()).toBe(before + 1);
+    const entry = (await db.outbox.get(`reminders:${r1.id}`))!;
+    expect((entry.row as { deletedAt: string | null }).deletedAt).not.toBeNull();
   });
 });
 
@@ -58,6 +72,16 @@ describe('fireDue', () => {
       type: 'basic', title: 'Call the framer', message: 'Reminder from Atelier',
     }));
     expect((await db.reminders.get(r.id))!.remindedAt).not.toBeNull();
+  });
+
+  test('marking fired stamps updatedBy and queues the latest snapshot', async () => {
+    const a = await todo('stamp');
+    const r = await setReminder(db, a.id, past);
+    await fireDue(db, NOW);
+    const row = (await db.reminders.get(r.id))!;
+    expect(row.updatedBy).toBe('local');
+    expect(row.updatedAt).toBe(row.remindedAt);
+    expect((await db.outbox.get(`reminders:${r.id}`))!.row).toEqual(row);
   });
 
   test('skips future, deleted and done to-dos (done and deleted are marked silently)', async () => {

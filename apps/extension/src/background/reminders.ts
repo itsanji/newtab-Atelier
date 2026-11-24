@@ -1,5 +1,5 @@
 import type { AtelierDB } from '../data/db';
-import { clock, tx } from '../data/repo';
+import { clock, save, stamp, tx } from '../data/repo';
 import { liveReminders } from '../data/queries';
 
 const PREFIX = 'reminder:';
@@ -9,7 +9,10 @@ export const alarmName = (itemId: string) => PREFIX + itemId;
 /** One alarm per live, unfired reminder; clears reminder alarms that no longer apply. */
 export async function syncAlarms(db: AtelierDB): Promise<void> {
   const pending = (await liveReminders(db)).filter((r) => r.remindedAt === null);
-  const wanted = new Map(pending.map((r) => [alarmName(r.itemId), Date.parse(r.remindAt)]));
+  // A damaged `remindAt` must not stop the other reminders: skip it.
+  const wanted = new Map(
+    pending.map((r) => [alarmName(r.itemId), Date.parse(r.remindAt)] as const).filter(([, when]) => Number.isFinite(when)),
+  );
   for (const alarm of await chrome.alarms.getAll()) {
     if (alarm.name.startsWith(PREFIX) && !wanted.has(alarm.name)) await chrome.alarms.clear(alarm.name);
   }
@@ -27,10 +30,8 @@ export async function fireDue(db: AtelierDB, now: Date): Promise<string[]> {
     const item = await tx(db, async () => {
       const cur = await db.reminders.get(r.id);
       if (!cur || cur.deletedAt !== null || cur.remindedAt !== null) return null;
-      const stamp = clock.now();
-      const next = { ...cur, remindedAt: stamp, updatedAt: stamp };
-      await db.reminders.put(next);
-      await db.outbox.add({ table: 'reminders', rowId: next.id, row: { ...next }, queuedAt: stamp });
+      const now = clock.now();
+      await save(db, 'reminders', { ...cur, remindedAt: now, ...stamp(now) }, now);
       return db.items.get(r.itemId);
     });
     // A deleted or completed to-do has nothing left to remind about.
