@@ -1,4 +1,5 @@
 import { keyBetween, type Category, type Item, type Iso, type Reminder, type TableName, type Workspace } from '@atelier/core';
+import Dexie from 'dexie';
 import { enqueue, type AtelierDB } from './db';
 import { currentUserId } from '../account/account';
 import { liveCategories, liveItems, liveWorkspaces } from './queries';
@@ -39,8 +40,49 @@ function base(now: string) {
 }
 
 export const stamp = (now: string) => ({ updatedAt: now, updatedBy: currentUserId() });
-export const tx = <T>(db: AtelierDB, fn: () => Promise<T>) =>
-  db.transaction('rw', [db.workspaces, db.categories, db.items, db.reminders, db.outbox], fn);
+
+const writeListeners = new Set<() => void>();
+
+/** Call `fn` after every committed local mutation (not sync writes). Returns an unsubscribe function. */
+export function onLocalWrite(fn: () => void): () => void {
+  writeListeners.add(fn);
+  return () => void writeListeners.delete(fn);
+}
+
+/** Run a mutation in one rw transaction; the outermost one notifies `onLocalWrite` listeners once it commits. */
+export function tx<T>(db: AtelierDB, fn: () => Promise<T>): Promise<T> {
+  const nested = Dexie.currentTransaction != null;
+  const done = db.transaction('rw', [db.workspaces, db.categories, db.items, db.reminders, db.outbox], fn);
+  if (nested) return done;
+  return done.then((result) => {
+    for (const listener of [...writeListeners]) {
+      try {
+        listener();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return result;
+  });
+}
+
+const KEY_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+const randomChar = (chars: string) => chars[crypto.getRandomValues(new Uint32Array(1))[0]! % chars.length]!;
+
+/**
+ * A key after `last` with a random 3-char suffix, so two devices appending to the same list
+ * don't produce equal keys. Falls back to the plain key if the suffix would make it invalid.
+ */
+export function appendKey(last: string | null): string {
+  const plain = keyBetween(last, null);
+  const key = plain + randomChar(KEY_CHARS) + randomChar(KEY_CHARS) + randomChar(KEY_CHARS.slice(1));
+  try {
+    keyBetween(key, null);
+    return key;
+  } catch {
+    return plain;
+  }
+}
 
 async function keyFor<S extends { id: string; sortKey: string }>(
   db: AtelierDB, table: TableName, beforeId: string | null, afterId: string | null,
@@ -48,8 +90,9 @@ async function keyFor<S extends { id: string; sortKey: string }>(
   const before = beforeId ? await live<S & Row>(db, table, beforeId) : null;
   const after = afterId ? await live<S & Row>(db, table, afterId) : null;
   // Equal or inverted neighbour keys have no room between them: place it right after `before` instead.
-  if (before && after && before.sortKey >= after.sortKey) return keyBetween(before.sortKey, null);
-  return keyBetween(before?.sortKey ?? null, after?.sortKey ?? null);
+  if (before && after && before.sortKey >= after.sortKey) return appendKey(before.sortKey);
+  if (!after) return appendKey(before?.sortKey ?? null);
+  return keyBetween(before?.sortKey ?? null, after.sortKey);
 }
 
 // Workspaces
@@ -60,7 +103,7 @@ export function createWorkspace(db: AtelierDB, input: { name: string; emoji?: st
     const last = (await liveWorkspaces(db)).at(-1);
     const row: Workspace = {
       ...base(now), name: input.name, emoji: input.emoji ?? null, ownerId: null,
-      sortKey: keyBetween(last?.sortKey ?? null, null),
+      sortKey: appendKey(last?.sortKey ?? null),
     };
     return save(db, 'workspaces', row, now);
   });
@@ -115,7 +158,7 @@ export function createCategory(
     const siblings = await liveCategories(db, input.workspaceId);
     const sortKey = opts.position === 'start'
       ? keyBetween(null, siblings[0]?.sortKey ?? null)
-      : keyBetween(siblings.at(-1)?.sortKey ?? null, null);
+      : appendKey(siblings.at(-1)?.sortKey ?? null);
     const row: Category = {
       ...base(now), workspaceId: input.workspaceId, name: input.name, emoji: input.emoji ?? null,
       sortKey, tabGroup: input.tabGroup ?? null, shareToken: null,
@@ -169,7 +212,7 @@ export function createItem(
       ? await keyFor(db, 'items', input.beforeId ?? null, input.afterId ?? null)
       : input.position === 'start'
         ? keyBetween(null, siblings[0]?.sortKey ?? null)
-        : keyBetween(siblings.at(-1)?.sortKey ?? null, null);
+        : appendKey(siblings.at(-1)?.sortKey ?? null);
     const row: Item = {
       ...base(now), ...(input.id ? { id: input.id } : {}), categoryId: input.categoryId, kind: input.kind, sortKey, title: input.title,
       url: input.url ?? null, faviconUrl: input.faviconUrl ?? null, note: input.note ?? null,

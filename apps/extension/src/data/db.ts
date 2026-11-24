@@ -21,7 +21,8 @@ export interface Member {
   userId: string | null;
   role: 'owner' | 'editor' | 'viewer';
   email?: string;
-  displayName?: string;
+  displayName?: string | null;
+  deletedAt?: string | null;
   [extra: string]: unknown;
 }
 

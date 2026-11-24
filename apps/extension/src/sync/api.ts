@@ -77,6 +77,8 @@ export interface PullResponse {
   reminders: Reminder[];
   members: Member[];
   removedWorkspaceIds: string[];
+  /** Rows moved out of a workspace the caller can see into one they can't. Missing from older servers. */
+  goneRows?: Array<{ table: 'categories' | 'items'; id: string }>;
 }
 
 const TIMEOUT_MS = 15_000;

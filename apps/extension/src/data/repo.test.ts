@@ -1,8 +1,9 @@
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { keyBetween } from '@atelier/core';
 import { openDb, type AtelierDB } from './db';
 import {
   clock, createCategory, createItem, createWorkspace, deleteCategory, deleteWorkspace,
-  LastWorkspaceError, moveItem, updateItem, updateCategory, moveCategory,
+  LastWorkspaceError, moveItem, updateItem, updateCategory, moveCategory, appendKey, onLocalWrite, tx,
 } from './repo';
 import { ensureSeed } from './seed';
 import { liveCategories, liveItems, liveWorkspaces } from './queries';
@@ -163,4 +164,68 @@ test('createItem with neighbours places it between them in one write', async () 
   const x = await createItem(db, { categoryId: cat.id, kind: 'link', title: 'x', beforeId: a.id, afterId: b.id });
   expect((await liveItems(db, cat.id)).map((i) => i.title)).toEqual(['a', 'x', 'b']);
   expect((await since(before)).map((r) => r.rowId)).toEqual([x.id]);
+});
+
+describe('sort-key jitter and local-write hook', () => {
+  test('appended sort keys are unique across devices', async () => {
+    // Two devices with the same synced state append to the same category.
+    const { ws, cat } = await setup();
+    const a0 = await item(cat.id, 'a');
+    const other = openDb('test-' + crypto.randomUUID());
+    await other.workspaces.put((await db.workspaces.get(ws.id))!);
+    await other.categories.put((await db.categories.get(cat.id))!);
+    await other.items.put(a0);
+    const keys = new Set<string>();
+    for (let i = 0; i < 20; i++) {
+      const x = await createItem(db, { categoryId: cat.id, kind: 'link', title: `x${i}` });
+      const y = await createItem(other, { categoryId: cat.id, kind: 'link', title: `y${i}` });
+      expect(x.sortKey).not.toBe(y.sortKey);
+      keys.add(x.sortKey).add(y.sortKey);
+      // Still valid keys that sort after the previous last item.
+      expect(x.sortKey > a0.sortKey && y.sortKey > a0.sortKey).toBe(true);
+      expect(() => keyBetween(x.sortKey, null)).not.toThrow();
+    }
+    expect(keys.size).toBe(40);
+    // Workspaces and categories appended on two devices differ too.
+    const w1 = await createWorkspace(db, { name: 'n' });
+    const w2 = await createWorkspace(other, { name: 'n' });
+    expect(w1.sortKey).not.toBe(w2.sortKey);
+    const c1 = await createCategory(db, { workspaceId: ws.id, name: 'n' });
+    const c2 = await createCategory(other, { workspaceId: ws.id, name: 'n' });
+    expect(c1.sortKey).not.toBe(c2.sortKey);
+  });
+
+  test('appendKey adds three chars not ending in 0 and stays valid', () => {
+    for (let i = 0; i < 200; i++) {
+      const plain = keyBetween('a5', null);
+      const k = appendKey('a5');
+      expect(k.startsWith(plain)).toBe(true);
+      expect(k).toMatch(/^[0-9A-Za-z]+$/);
+      expect(k.length).toBe(plain.length + 3);
+      expect(k.endsWith('0')).toBe(false);
+      expect(() => keyBetween(k, null)).not.toThrow();
+      expect(k > 'a5').toBe(true);
+    }
+    expect(() => keyBetween(appendKey(null), null)).not.toThrow();
+  });
+
+  test('onLocalWrite fires once per committed write, not for nested or failed ones', async () => {
+    const calls = vi.fn();
+    const off = onLocalWrite(calls);
+    try {
+      const { cat } = await setup();
+      expect(calls).toHaveBeenCalledTimes(2);
+      await tx(db, async () => {
+        await createItem(db, { categoryId: cat.id, kind: 'link', title: 'nested' });
+        await createItem(db, { categoryId: cat.id, kind: 'link', title: 'nested 2' });
+      });
+      expect(calls).toHaveBeenCalledTimes(3);
+      await expect(updateItem(db, 'missing', { title: 'x' })).rejects.toThrow();
+      expect(calls).toHaveBeenCalledTimes(3);
+    } finally {
+      off();
+    }
+    await createWorkspace(db, { name: 'after off' });
+    expect(calls).toHaveBeenCalledTimes(3);
+  });
 });
