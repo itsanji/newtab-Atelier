@@ -9,6 +9,7 @@ import type { Category, Item } from '@atelier/core';
 import { useDb } from '../data/DbContext';
 import type { AtelierDB } from '../data/db';
 import { liveCategories, liveItems } from '../data/queries';
+import { saveTab } from '../chrome/tabs';
 import { moveCategory, moveItem } from '../data/repo';
 import { IconButton } from '../ui/components/IconButton';
 import { useNotify, useRun } from './Notice';
@@ -38,7 +39,7 @@ export function computeCategoryDrop(
 }
 
 export type DropEnd = {
-  active: { type: DragType; id: string };
+  active: { type: DragType; id: string; tab?: { url?: string; title?: string } };
   over: { type: DragType; id: string } | null;
   placement: Placement;
 };
@@ -72,6 +73,31 @@ export async function applyDrop(db: AtelierDB, { active, over, placement }: Drop
     return null;
   }
 
+  if (active.type === 'tab') {
+    if (!active.tab?.url) return null;
+    let categoryId: string;
+    let overItemId: string | null = null;
+    if (over.type === 'item') {
+      const row = await db.items.get(over.id);
+      if (!row || row.deletedAt !== null) return null;
+      categoryId = row.categoryId;
+      overItemId = over.id;
+    } else if (over.type === 'category') {
+      categoryId = over.id;
+    } else if (over.type === 'workspace') {
+      const first = (await liveCategories(db, over.id))[0];
+      if (!first) return 'Add a category to that workspace first';
+      categoryId = first.id;
+    } else return null;
+    const item = await saveTab(db, active.tab as chrome.tabs.Tab, { categoryId });
+    if (overItemId !== null) {
+      const siblings = (await liveItems(db, categoryId)).filter((s) => s.id !== item.id);
+      const target = computeItemDrop({ categoryId, overItemId, placement }, siblings);
+      await moveItem(db, item.id, target);
+    }
+    return null;
+  }
+
   if (active.type === 'category' && over.type === 'category') {
     const cat = await db.categories.get(active.id);
     if (!cat || cat.deletedAt !== null) return null;
@@ -85,7 +111,7 @@ export async function applyDrop(db: AtelierDB, { active, over, placement }: Drop
   return null;
 }
 
-type DragData = { type?: DragType; title?: string; categoryName?: string };
+type DragData = { type?: DragType; title?: string; categoryName?: string; tab?: { url?: string; title?: string } };
 
 const collisions: CollisionDetection = (args) => {
   const type = (args.active.data.current as DragData | undefined)?.type;
@@ -141,7 +167,7 @@ export function BoardDnd({ children }: { children: ReactNode }) {
     const o = e.over?.data.current as DragData | undefined;
     if (!e.over || !a?.type || !o?.type) return;
     const drop: DropEnd = {
-      active: { type: a.type, id: String(e.active.id) },
+      active: { type: a.type, id: String(e.active.id), tab: a.tab },
       over: { type: o.type, id: String(e.over.id) },
       placement: placementOf(e.active, e.over, a.type === 'category' ? 'x' : 'y'),
     };

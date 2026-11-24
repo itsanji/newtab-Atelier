@@ -40,7 +40,10 @@ export function createChromeFake() {
   let nextGroupId = 1;
   const tabs = new Map<number, FakeTab>();
   const windows = new Map<number, { id: number; focused: boolean }>();
-  const groups = new Map<number, { id: number; windowId: number; title?: string; color?: string; collapsed: boolean }>();
+  type FakeGroup = { id: number; windowId: number; title?: string; color?: string; collapsed: boolean };
+  const groups = new Map<number, FakeGroup>();
+  const inWindow = (windowId: number) => [...tabs.values()].filter((t) => t.windowId === windowId);
+  const currentWindowId = () => [...windows.keys()][0] ?? addWindow().id;
   const store: Record<string, unknown> = {};
   const alarmMap = new Map<string, { name: string; scheduledTime: number; periodInMinutes?: number }>();
 
@@ -55,31 +58,47 @@ export function createChromeFake() {
       onCreated: createEvent<(tab: FakeTab) => void>(),
       onRemoved: createEvent<(tabId: number, info: { windowId: number; isWindowClosing: boolean }) => void>(),
       onUpdated: createEvent<(tabId: number, change: Partial<FakeTab>, tab: FakeTab) => void>(),
+      onMoved: createEvent<(tabId: number, info: { windowId: number; fromIndex: number; toIndex: number }) => void>(),
       create: vi.fn(async (props: Partial<FakeTab> = {}) => {
-        const windowId = props.windowId ?? [...windows.keys()][0] ?? addWindow().id;
+        const windowId = props.windowId ?? currentWindowId();
+        const siblings = inWindow(windowId);
         const tab: FakeTab = {
           id: nextTabId++,
           windowId,
-          index: [...tabs.values()].filter((t) => t.windowId === windowId).length,
+          index: Math.min(props.index ?? siblings.length, siblings.length),
           active: props.active ?? true,
           pinned: props.pinned ?? false,
           groupId: -1,
           url: props.url,
           title: props.title,
         };
+        for (const t of siblings) if (t.index >= tab.index) t.index++;
+        if (tab.active) for (const t of siblings) t.active = false;
         tabs.set(tab.id, tab);
         fake.tabs.onCreated.dispatch(tab);
         return tab;
       }),
-      remove: vi.fn(async (id: number) => {
-        const tab = tabs.get(id);
-        if (!tab) return;
-        tabs.delete(id);
-        fake.tabs.onRemoved.dispatch(id, { windowId: tab.windowId, isWindowClosing: false });
+      remove: vi.fn(async (ids: number | number[]) => {
+        for (const id of Array.isArray(ids) ? ids : [ids]) {
+          const tab = tabs.get(id);
+          if (!tab) continue;
+          tabs.delete(id);
+          for (const t of inWindow(tab.windowId)) if (t.index > tab.index) t.index--;
+          fake.tabs.onRemoved.dispatch(id, { windowId: tab.windowId, isWindowClosing: false });
+          if (groups.has(tab.groupId) && ![...tabs.values()].some((t) => t.groupId === tab.groupId)) {
+            const g = groups.get(tab.groupId);
+            groups.delete(tab.groupId);
+            fake.tabGroups.onRemoved.dispatch(g);
+          }
+        }
       }),
-      query: vi.fn(async (q: Partial<FakeTab> = {}) =>
-        [...tabs.values()].filter((t) => Object.entries(q).every(([k, v]) => (t as any)[k] === v)),
-      ),
+      query: vi.fn(async (q: Record<string, unknown> = {}) => {
+        const { currentWindow, ...rest } = q;
+        return [...tabs.values()]
+          .filter((t) => (currentWindow === undefined ? true : (t.windowId === currentWindowId()) === currentWindow))
+          .filter((t) => Object.entries(rest).every(([k, v]) => (t as any)[k] === v))
+          .sort((x, y) => x.windowId - y.windowId || x.index - y.index);
+      }),
       get: vi.fn(async (id: number) => tabs.get(id)),
       update: vi.fn(async (id: number, props: Partial<FakeTab>) => {
         const tab = tabs.get(id);
@@ -88,16 +107,51 @@ export function createChromeFake() {
         fake.tabs.onUpdated.dispatch(id, props, tab);
         return tab;
       }),
+      move: vi.fn(async (id: number, props: { index: number; windowId?: number }) => {
+        const tab = tabs.get(id);
+        if (!tab) return undefined;
+        const from = tab.index;
+        const others = inWindow(tab.windowId).filter((t) => t.id !== id);
+        const to = Math.max(0, Math.min(props.index < 0 ? others.length : props.index, others.length));
+        others.splice(to, 0, tab);
+        others.forEach((t, i) => (t.index = i));
+        fake.tabs.onMoved.dispatch(id, { windowId: tab.windowId, fromIndex: from, toIndex: to });
+        return tab;
+      }),
+      group: vi.fn(async (opts: { tabIds: number | number[]; groupId?: number; createProperties?: { windowId?: number } }) => {
+        const ids = Array.isArray(opts.tabIds) ? opts.tabIds : [opts.tabIds];
+        const first = tabs.get(ids[0]!);
+        let gid = opts.groupId;
+        if (gid === undefined) {
+          gid = nextGroupId++;
+          const g = { id: gid, windowId: opts.createProperties?.windowId ?? first?.windowId ?? currentWindowId(), collapsed: false } as FakeGroup;
+          groups.set(gid, g);
+          fake.tabGroups.onCreated.dispatch(g);
+        }
+        for (const id of ids) {
+          const t = tabs.get(id);
+          if (!t) continue;
+          t.groupId = gid;
+          fake.tabs.onUpdated.dispatch(id, { groupId: gid }, t);
+        }
+        return gid;
+      }),
     },
     tabGroups: {
+      TAB_GROUP_ID_NONE: -1,
       onCreated: createEvent<(g: unknown) => void>(),
       onRemoved: createEvent<(g: unknown) => void>(),
       onUpdated: createEvent<(g: unknown) => void>(),
-      query: vi.fn(async () => [...groups.values()]),
+      query: vi.fn(async (q: Record<string, unknown> = {}) =>
+        [...groups.values()].filter((g) => Object.entries(q).every(([k, v]) => (g as any)[k] === v)),
+      ),
       get: vi.fn(async (id: number) => groups.get(id)),
       update: vi.fn(async (id: number, props: object) => {
         const g = groups.get(id);
-        if (g) Object.assign(g, props);
+        if (g) {
+          Object.assign(g, props);
+          fake.tabGroups.onUpdated.dispatch(g);
+        }
         return g;
       }),
     },

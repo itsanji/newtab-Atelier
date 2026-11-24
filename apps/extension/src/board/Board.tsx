@@ -8,6 +8,7 @@ import { createCategory } from '../data/repo';
 import { InlineNameField } from './InlineNameField';
 import { Icon } from '../ui/components/Icon';
 import { useRun } from './Notice';
+import { openAll } from '../chrome/tabs';
 import { CategoryColumn } from './CategoryColumn';
 
 export function Board({ workspace }: { workspace: Workspace }) {
@@ -19,7 +20,7 @@ export function Board({ workspace }: { workspace: Workspace }) {
   return (
     <div className="atl-board">
       <SortableContext items={categories.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
-        {categories.map((c) => <CategoryColumn key={c.id} category={c} />)}
+        {categories.map((c) => <CategoryColumn key={c.id} category={c} onOpenAll={() => void run(openAll(db, c.id))} />)}
       </SortableContext>
       <div className="atl-newcat">
         {adding ? (

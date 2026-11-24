@@ -1,5 +1,6 @@
 import type { Workspace } from '@atelier/core';
 import { Dabs } from '../ui/components/Dabs';
+import { OpenTabsPanel } from './OpenTabsPanel';
 import { WorkspaceList } from './WorkspaceList';
 
 export function Sidebar({ workspaces, selectedId, onSelect }: { workspaces: Workspace[]; selectedId: string; onSelect(id: string): void }) {
@@ -10,7 +11,7 @@ export function Sidebar({ workspaces, selectedId, onSelect }: { workspaces: Work
         <Dabs />
       </div>
       <WorkspaceList workspaces={workspaces} selectedId={selectedId} onSelect={onSelect} />
-      <section aria-label="Open tabs" data-slot="open-tabs" hidden />
+      <OpenTabsPanel workspaceId={selectedId} />
     </aside>
   );
 }
