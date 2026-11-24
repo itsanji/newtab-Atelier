@@ -43,6 +43,7 @@ export interface TestApp {
   sql: SQL;
   mail: ReturnType<typeof memoryTransport>;
   hub: Hub;
+  websocket: ReturnType<typeof createApp>['websocket'];
   close(): Promise<void>;
 }
 
@@ -51,14 +52,14 @@ export async function makeApp(
 ): Promise<TestApp> {
   const db = await freshDb();
   const mail = memoryTransport();
-  const { app, hub } = createApp({
+  const { app, hub, websocket } = createApp({
     sql: db.sql,
     config: testConfig({ databaseUrl: db.url, ...overrides.config }),
     mail: overrides.mail === undefined ? mail : overrides.mail,
     ...(overrides.now ? { now: overrides.now } : {}),
     ...(overrides.hub ? { hub: overrides.hub } : {}),
   });
-  return { app, sql: db.sql, mail, hub, close: db.drop };
+  return { app, sql: db.sql, mail, hub, websocket, close: db.drop };
 }
 
 /** Signs up through the API and returns the bearer token and user. */

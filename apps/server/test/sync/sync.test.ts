@@ -431,7 +431,7 @@ describe('sync', () => {
 
   test('push notifies live members of changed workspaces', async () => {
     const calls: string[][] = [];
-    ctx = await makeApp({ hub: { notifyUsers: (userIds) => calls.push([...userIds].sort()) } });
+    ctx = await makeApp({ hub: { notifyUsers: (userIds) => void calls.push([...userIds].sort()), subscribe: () => () => {} } });
     const a = await seed('a@example.com');
     const b = await signUp(ctx.app, 'b@example.com');
     await addMember(a.w.id, b.user, 'viewer');

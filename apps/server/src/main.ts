@@ -1,7 +1,7 @@
 import { createApp } from './app';
 import { ConfigError, loadConfig } from './config';
 import { connect, migrate } from './db';
-import type { MailTransport } from './mail';
+import { smtpTransport, type MailTransport } from './mail';
 
 let config;
 try {
@@ -17,9 +17,8 @@ try {
 const sql = connect(config.databaseUrl);
 await migrate(sql);
 
-// SMTP transport arrives with the sign-in task; until then mail stays off.
-const mail: MailTransport | null = null;
+const mail: MailTransport | null = config.smtp ? smtpTransport(config.smtp.url, config.smtp.from) : null;
 
-const { app } = createApp({ sql, config, mail });
-const server = Bun.serve({ port: config.port, fetch: app.fetch });
+const { app, websocket } = createApp({ sql, config, mail });
+const server = Bun.serve({ port: config.port, fetch: app.fetch, websocket });
 console.log(`Atelier server listening on ${server.url}`);

@@ -5,6 +5,9 @@ import type { MailTransport } from './mail';
 import { createHub, type Hub } from './live/hub';
 import { authRoutes } from './auth/routes';
 import { syncRoutes } from './sync/routes';
+import { memberRoutes } from './members/routes';
+import { liveRoutes } from './live/routes';
+import { websocket } from 'hono/bun';
 
 export interface Deps {
   sql: SQL;
@@ -16,7 +19,7 @@ export interface Deps {
   hub?: Hub;
 }
 
-export function createApp(deps: Deps): { app: Hono; websocket: unknown; hub: Hub } {
+export function createApp(deps: Deps): { app: Hono; websocket: typeof websocket; hub: Hub } {
   const { config } = deps;
   const hub = deps.hub ?? createHub();
   const app = new Hono();
@@ -33,6 +36,8 @@ export function createApp(deps: Deps): { app: Hono; websocket: unknown; hub: Hub
 
   app.route('/api/auth', authRoutes(deps.sql, config, now));
   app.route('/api/sync', syncRoutes(deps.sql, config, now, hub));
+  app.route('/api/workspaces', memberRoutes(deps.sql, config, now, hub, deps.mail));
+  app.route('/api/live', liveRoutes(deps.sql, config.sessionSecret, now, hub));
 
   app.notFound((c) => (c.req.path.startsWith('/api/') ? c.json({ error: 'Not found' }, 404) : c.text('Not found', 404)));
   app.onError((err, c) => {
@@ -40,5 +45,5 @@ export function createApp(deps: Deps): { app: Hono; websocket: unknown; hub: Hub
     return c.json({ error: 'Something went wrong' }, 500);
   });
 
-  return { app, websocket: undefined, hub };
+  return { app, websocket, hub };
 }
