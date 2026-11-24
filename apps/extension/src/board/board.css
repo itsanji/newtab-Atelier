@@ -139,3 +139,4 @@ a { color: var(--lily); }
 .atl-emoji-btn:not(:has(span)) { color: var(--ink-muted); }
 .atl-column-head .atl-emoji-btn:not(:has(span)) { opacity: 0; }
 .atl-column-head:hover .atl-emoji-btn, .atl-column-head:focus-within .atl-emoji-btn, .atl-column-head .atl-emoji:has([aria-expanded="true"]) .atl-emoji-btn { opacity: 1; }
+.atl-data { margin-top: auto; }

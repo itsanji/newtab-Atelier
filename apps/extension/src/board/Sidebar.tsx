@@ -1,5 +1,6 @@
 import type { Workspace } from '@atelier/core';
 import { Dabs } from '../ui/components/Dabs';
+import { DataMenu } from './DataMenu';
 import { OpenTabsPanel } from './OpenTabsPanel';
 import { WorkspaceList } from './WorkspaceList';
 
@@ -12,6 +13,7 @@ export function Sidebar({ workspaces, selectedId, onSelect }: { workspaces: Work
       </div>
       <WorkspaceList workspaces={workspaces} selectedId={selectedId} onSelect={onSelect} />
       <OpenTabsPanel workspaceId={selectedId} />
+      <DataMenu />
     </aside>
   );
 }

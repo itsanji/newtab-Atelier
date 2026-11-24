@@ -18,14 +18,14 @@ export class NotFoundError extends Error {
   }
 }
 
-type Row = { id: string; deletedAt: string | null; updatedAt: string; updatedBy: string | null };
+export type Row = { id: string; deletedAt: string | null; updatedAt: string; updatedBy: string | null };
 
 async function queue(db: AtelierDB, table: TableName, row: Row, now: string): Promise<void> {
   await db.outbox.add({ table, rowId: row.id, row: { ...row }, queuedAt: now });
 }
 
 /** Write a changed row and its outbox entry. Call inside a transaction. */
-async function save<R extends Row>(db: AtelierDB, table: TableName, row: R, now: string): Promise<R> {
+export async function save<R extends Row>(db: AtelierDB, table: TableName, row: R, now: string): Promise<R> {
   await db.table(table).put(row);
   await queue(db, table, row, now);
   return row;
