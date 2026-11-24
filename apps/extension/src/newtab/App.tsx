@@ -16,6 +16,8 @@ import { BoardHeader } from '../board/BoardHeader';
 import { BoardDnd } from '../board/dnd';
 import { Sidebar } from '../board/Sidebar';
 import { useHighlightItem } from '../board/useHighlightItem';
+import { AccountEntry } from '../board/AccountDialog';
+import { CURSOR_KEY } from '../sync/engine';
 
 const SELECTED_KEY = 'selectedWorkspaceId';
 
@@ -92,13 +94,28 @@ function LiveSync() {
 
 function Ready() {
   const db = useDb();
-  const [ready, setReady] = useState(false);
+  const account = useAccount();
+  const state = useLiveQuery(async () => ({
+    hasWorkspaces: (await db.workspaces.count()) > 0,
+    pulled: (await getMeta(db, CURSOR_KEY)) !== undefined,
+  }), [db]);
+  // A signed-in board gets its starter workspace only after the first pull found none on the server.
+  const waitForPull = !!account && !!state && !state.hasWorkspaces && !state.pulled;
   useEffect(() => {
-    let live = true;
-    void ensureSeed(db).then(() => live && setReady(true));
-    return () => { live = false; };
-  }, [db]);
-  if (!ready) return null;
+    if (account === undefined || !state || state.hasWorkspaces || waitForPull) return;
+    void ensureSeed(db).catch((e: unknown) => console.error(e));
+  }, [db, account, state, waitForPull]);
+  if (account === undefined || !state) return null;
+  if (waitForPull) {
+    return (
+      <div className="atl-waiting" role="status">
+        <LiveSync />
+        <p>Getting your board from the server…</p>
+        <AccountEntry />
+      </div>
+    );
+  }
+  if (!state.hasWorkspaces) return null;
   return (
     <NoticeProvider>
       <LiveSync />

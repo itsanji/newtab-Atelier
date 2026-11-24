@@ -14,6 +14,16 @@ function open(partition: string, userId: string | null): AtelierDB {
   return cached.db;
 }
 
+/**
+ * Close and drop the cached database of a partition, so the next `getActiveDb()` opens a fresh one.
+ * Call before deleting a partition: a deleted database's old instance stays closed for good.
+ */
+export function forgetDb(partition: string): void {
+  if (cached?.partition !== partition) return;
+  cached.db.close();
+  cached = undefined;
+}
+
 /** For the service worker: the database of the active account, or the local one. */
 export async function getActiveDb(): Promise<AtelierDB> {
   const account = await getAccount();

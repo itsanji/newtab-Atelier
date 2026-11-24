@@ -23,7 +23,7 @@ describe('partitionFor', () => {
     expect(partitionFor('https://a.example', 'u1')).toMatch(/^acct-[0-9a-f]{16}$/);
   });
   test('sha256 matches WebCrypto', async () => {
-    for (const text of ['', 'abc', 'https://a.example|u1', 'x'.repeat(200), 'é☃']) {
+    for (const text of ['', 'abc', 'https://a.example|u1', 'x'.repeat(200), 'é☃', ...[55, 56, 63, 64].map((n) => 'y'.repeat(n))]) {
       const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
       const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
       expect(sha256Hex(text)).toBe(hex);

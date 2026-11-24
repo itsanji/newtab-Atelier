@@ -243,6 +243,14 @@ export function createChromeFake() {
     commands: {
       onCommand: createEvent<(command: string, tab?: FakeTab) => void>(),
     },
+    permissions: {
+      contains: vi.fn(async (_perm: { origins?: string[] }) => true),
+      request: vi.fn(async (_perm: { origins?: string[] }) => true),
+    },
+    identity: {
+      getRedirectURL: (path = '') => `https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/${path}`,
+      launchWebAuthFlow: vi.fn(async (_details: { url: string; interactive?: boolean }): Promise<string | undefined> => undefined),
+    },
     runtime: {
       onMessage: createEvent<(message: unknown, sender: object, sendResponse: Listener) => void>(),
       onInstalled: createEvent<(details: object) => void>(),
