@@ -8,6 +8,8 @@ import { syncRoutes } from './sync/routes';
 import { memberRoutes } from './members/routes';
 import { liveRoutes } from './live/routes';
 import { shareApiRoutes, sharePublicRoutes } from './share/routes';
+import { magicRoutes } from './auth/magic';
+import { googleRoutes } from './auth/google';
 import { websocket } from 'hono/bun';
 
 export interface Deps {
@@ -35,6 +37,12 @@ export function createApp(deps: Deps): { app: Hono; websocket: typeof websocket;
     }),
   );
 
+  const magic = magicRoutes(deps.sql, config, now, deps.mail);
+  const google = googleRoutes(deps.sql, config, now);
+  app.route('/api/auth/magic', magic.api);
+  app.route('/api/auth/google', google.api);
+  app.route('/auth/magic', magic.pages);
+  app.route('/auth/google', google.pages);
   app.route('/api/auth', authRoutes(deps.sql, config, now));
   app.route('/api/sync', syncRoutes(deps.sql, config, now, hub));
   app.route('/api/workspaces', memberRoutes(deps.sql, config, now, hub, deps.mail));
