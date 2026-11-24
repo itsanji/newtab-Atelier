@@ -18,7 +18,7 @@ export interface OutboxEntry {
 export interface Member {
   id: string;
   workspaceId: string;
-  userId: string;
+  userId: string | null;
   role: 'owner' | 'editor' | 'viewer';
   email?: string;
   displayName?: string;
