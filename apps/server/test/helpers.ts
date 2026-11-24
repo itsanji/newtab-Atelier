@@ -59,3 +59,20 @@ export async function makeApp(
   });
   return { app, sql: db.sql, mail, hub, close: db.drop };
 }
+
+/** Signs up through the API and returns the bearer token and user. */
+export async function signUp(
+  app: Hono,
+  email: string,
+  password = 'correct horse battery',
+): Promise<{ token: string; user: { id: string; email: string; displayName: string } }> {
+  const res = await app.request('/api/auth/signup', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (res.status !== 201) throw new Error(`signUp failed: ${res.status} ${await res.text()}`);
+  return (await res.json()) as { token: string; user: { id: string; email: string; displayName: string } };
+}
+
+export const bearer = (token: string): Record<string, string> => ({ authorization: `Bearer ${token}` });
