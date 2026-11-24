@@ -53,8 +53,8 @@ function WorkspaceRow({
         >
           <Field label="Name" value={name} error={nameError} autoFocus onChange={(e) => { setName(e.target.value); setNameError(undefined); }} />
           <div className="atl-emoji-row">
-            <span className="im-label">Emoji (optional)</span>
-            <EmojiPicker value={emoji || null} onChange={(e) => setEmoji(e ?? '')} />
+            <span className="im-label" id={`emoji-label-${ws.id}`}>Emoji (optional)</span>
+            <EmojiPicker labelledBy={`emoji-label-${ws.id}`} value={emoji || null} onChange={(e) => setEmoji(e ?? '')} />
           </div>
           <div className="atl-form-actions">
             <Button type="submit">Save workspace</Button>

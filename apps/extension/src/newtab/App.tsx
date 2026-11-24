@@ -18,7 +18,7 @@ const SELECTED_KEY = 'selectedWorkspaceId';
 let defaultDb: AtelierDB | undefined;
 
 function Shell({ db }: { db: AtelierDB }) {
-  useTheme();
+  const theme = useTheme();
   const run = useRun();
   const workspaces = useLiveQuery(() => liveWorkspaces(db), [db]);
   // `null` means "no choice stored"; `undefined` means "still loading".
@@ -60,7 +60,7 @@ function Shell({ db }: { db: AtelierDB }) {
     <div className="atl-shell">
       <Sidebar workspaces={workspaces} selectedId={selected.id} onSelect={(id) => void run(setMeta(db, SELECTED_KEY, id))} />
       <main className="atl-main">
-        <BoardHeader workspace={selected} query={query} onQueryChange={setQuery} />
+        <BoardHeader workspace={selected} query={query} onQueryChange={setQuery} theme={theme} />
         {trimmed ? (
           <SearchResults
             query={trimmed}

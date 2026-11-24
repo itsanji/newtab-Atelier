@@ -87,7 +87,7 @@ describe('theme and emoji on the board', () => {
     await user.click(await screen.findByRole('button', { name: 'Workspace options' }));
     await user.click(screen.getByRole('menuitem', { name: 'Edit' }));
     const dialog = screen.getByRole('dialog', { name: 'Edit workspace' });
-    await user.click(within(dialog).getByRole('button', { name: 'Add emoji' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Emoji (optional)' }));
     await user.click(screen.getByRole('button', { name: 'books' }));
     await user.click(within(dialog).getByRole('button', { name: 'Save workspace' }));
     await waitFor(async () => expect((await liveWorkspaces(db))[0]!.emoji).toBe('📚'));

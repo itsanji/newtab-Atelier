@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { getTheme, resolveTheme, setTheme, useTheme } from './settings';
+import { applyCachedTheme, getTheme, resolveTheme, setTheme, useTheme } from './settings';
 import { installChromeFake, type ChromeFake } from '../../test/chromeFake';
 
 function mockMedia(dark: boolean) {
@@ -65,5 +65,32 @@ describe('settings', () => {
       (chrome as unknown as ChromeFake).storage.onChanged.dispatch({ theme: { newValue: 'nocturne' } }, 'local');
     });
     await waitFor(() => expect(document.documentElement).toHaveClass('nocturne'));
+  });
+
+  test('a stored nocturne pref on a light OS never flashes giverny and keeps the cache', async () => {
+    await setTheme('nocturne');
+    localStorage.setItem('atelier-theme', 'nocturne');
+    localStorage.setItem('atelier-theme-pref', 'nocturne');
+    mockMedia(false);
+    applyCachedTheme();
+    const seen: string[] = [];
+    const obs = new MutationObserver(() => seen.push(document.documentElement.className));
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    const { result } = renderHook(() => useTheme());
+    await waitFor(() => expect(result.current.pref).toBe('nocturne'));
+    await new Promise((r) => setTimeout(r, 20));
+    obs.takeRecords().length && seen.push(document.documentElement.className);
+    obs.disconnect();
+    expect(seen.some((c) => c.includes('giverny'))).toBe(false);
+    expect(document.documentElement).toHaveClass('nocturne');
+    expect(localStorage.getItem('atelier-theme')).toBe('nocturne');
+  });
+
+  test('fast double cycle advances two steps', async () => {
+    await setTheme('giverny');
+    const { result } = renderHook(() => useTheme());
+    await waitFor(() => expect(result.current.pref).toBe('giverny'));
+    await act(async () => { void result.current.cycle(); void result.current.cycle(); });
+    await waitFor(async () => expect(await getTheme()).toBe('system'));
   });
 });

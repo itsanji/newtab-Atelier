@@ -136,3 +136,6 @@ a { color: var(--lily); }
 .atl-emoji-cell:focus-visible, .atl-emoji-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .atl-emoji-remove { align-self: flex-start; }
 .atl-emoji-row { display: flex; align-items: center; gap: var(--space-3); }
+.atl-emoji-btn:not(:has(span)) { color: var(--ink-muted); }
+.atl-column-head .atl-emoji-btn:not(:has(span)) { opacity: 0; }
+.atl-column-head:hover .atl-emoji-btn, .atl-column-head:focus-within .atl-emoji-btn, .atl-column-head .atl-emoji:has([aria-expanded="true"]) .atl-emoji-btn { opacity: 1; }

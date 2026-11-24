@@ -11,13 +11,14 @@ export const EMOJI: ReadonlyArray<readonly [string, string]> = [
   ['⛰️', 'mountain'], ['🌊', 'wave'], ['🌸', 'blossom'], ['🌳', 'tree'], ['🌙', 'moon'], ['☀️', 'sun'], ['🔥', 'fire'], ['💧', 'drop'],
   ['🐾', 'paw prints'], ['🐟', 'fish'], ['🦋', 'butterfly'], ['🐝', 'bee'], ['🎁', 'gift'], ['🎈', 'balloon'], ['🏆', 'trophy'], ['🎯', 'target'],
   ['🧩', 'puzzle'], ['🔑', 'key'], ['🔒', 'lock'], ['📦', 'package'], ['✏️', 'pencil'], ['🖌️', 'brush'], ['📰', 'newspaper'], ['🎧', 'headphones'],
-  ['🏋️', 'weights'], ['🧘', 'meditation'], ['🍷', 'wine'], ['🍕', 'pizza'], ['🏖️', 'beach'], ['⚽', 'football'], ['🎸', 'guitar'], ['🧵', 'thread'],
+  ['🧲', 'magnet'], ['🪴', 'potted plant'], ['🍷', 'wine'], ['🍕', 'pizza'], ['🏖️', 'beach'], ['⚽', 'football'], ['🎸', 'guitar'], ['🧵', 'thread'],
 ];
 
-export function EmojiPicker({ value, onChange }: { value: string | null | undefined; onChange(emoji: string | null): void }) {
+export function EmojiPicker({ value, onChange, labelledBy }: { value: string | null | undefined; onChange(emoji: string | null): void; labelledBy?: string }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
   const grid = useRef<HTMLDivElement>(null);
   const id = useId();
 
@@ -29,7 +30,11 @@ export function EmojiPicker({ value, onChange }: { value: string | null | undefi
     if (!open) return;
     cells()[0]?.focus();
     const onDown = (e: MouseEvent) => {
-      if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
+      if (root.current && !root.current.contains(e.target as Node)) {
+        const hadFocus = !!pop.current?.contains(document.activeElement);
+        setOpen(false);
+        if (hadFocus) trigger.current?.focus();
+      }
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
@@ -63,7 +68,8 @@ export function EmojiPicker({ value, onChange }: { value: string | null | undefi
         ref={trigger}
         type="button"
         className="atl-icon atl-emoji-btn"
-        aria-label={value ? 'Change emoji' : 'Add emoji'}
+        aria-label={labelledBy ? undefined : value ? 'Change emoji' : 'Add emoji'}
+        aria-labelledby={labelledBy}
         title={value ? 'Change emoji' : 'Add emoji'}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -73,7 +79,7 @@ export function EmojiPicker({ value, onChange }: { value: string | null | undefi
         {value ? <span aria-hidden="true">{value}</span> : <Icon name="plus" size={18} />}
       </button>
       {open && (
-        <div id={id} role="dialog" aria-label="Choose emoji" className="atl-emoji-pop" onKeyDown={onKey}>
+        <div id={id} ref={pop} role="dialog" aria-label="Choose emoji" className="atl-emoji-pop" onKeyDown={onKey}>
           <div ref={grid} className="atl-emoji-grid">
             {EMOJI.map(([emoji, name]) => (
               <button key={name} type="button" className="atl-emoji-cell" aria-label={name} onClick={() => pick(emoji)} tabIndex={-1}>

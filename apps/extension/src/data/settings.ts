@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type ThemePref = 'giverny' | 'nocturne' | 'system';
 export type ResolvedTheme = 'giverny' | 'nocturne';
 
 const KEY = 'theme';
 export const THEME_CACHE_KEY = 'atelier-theme';
+export const PREF_CACHE_KEY = 'atelier-theme-pref';
 const ORDER: ThemePref[] = ['giverny', 'nocturne', 'system'];
 const isPref = (v: unknown): v is ThemePref => v === 'giverny' || v === 'nocturne' || v === 'system';
 
@@ -34,10 +35,20 @@ export function applyCachedTheme() {
   } catch { /* storage unavailable */ }
 }
 
+function cachedPref(): ThemePref | null {
+  try {
+    const v = localStorage.getItem(PREF_CACHE_KEY);
+    return isPref(v) ? v : null;
+  } catch { return null; }
+}
+
 const darkQuery = () => (typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : null);
 
 export function useTheme() {
-  const [pref, setPref] = useState<ThemePref>('system');
+  // Seeded from the cache so the first render already matches the painted theme; null until known.
+  const [pref, setPref] = useState<ThemePref | null>(cachedPref);
+  const prefRef = useRef<ThemePref>(pref ?? 'system');
+  prefRef.current = pref ?? prefRef.current;
   const [dark, setDark] = useState(() => darkQuery()?.matches ?? false);
 
   useEffect(() => {
@@ -60,12 +71,20 @@ export function useTheme() {
     return () => mql.removeEventListener('change', onChange);
   }, []);
 
-  const resolved = resolveTheme(pref, dark);
+  const resolved = resolveTheme(pref ?? 'system', dark);
   useEffect(() => {
+    if (pref === null) return; // nothing is applied or cached until the stored pref is known
     applyClass(resolved);
-    try { localStorage.setItem(THEME_CACHE_KEY, resolved); } catch { /* ignore */ }
-  }, [resolved]);
+    try {
+      localStorage.setItem(THEME_CACHE_KEY, resolved);
+      localStorage.setItem(PREF_CACHE_KEY, pref);
+    } catch { /* ignore */ }
+  }, [resolved, pref]);
 
-  const cycle = useCallback(() => setTheme(ORDER[(ORDER.indexOf(pref) + 1) % ORDER.length]!), [pref]);
-  return { pref, resolved, cycle };
+  const cycle = useCallback(() => {
+    const next = ORDER[(ORDER.indexOf(prefRef.current) + 1) % ORDER.length]!;
+    prefRef.current = next; // fast double-clicks advance from the latest value
+    return setTheme(next);
+  }, []);
+  return { pref: pref ?? 'system', resolved, cycle };
 }
