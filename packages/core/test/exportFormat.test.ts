@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { exportFileSchema } from '../src/exportFormat';
+import { exportFileSchema, itemSchema } from '../src/exportFormat';
 
 const T = '2026-11-24T10:00:00.000Z';
 const base = { createdAt: T, updatedAt: T, deletedAt: null, updatedBy: null };
@@ -77,4 +77,10 @@ describe('link urls', () => {
       expect(ok(file({ items: [{ ...item, url }] }))).toBe(false);
     }
   });
+});
+
+test('itemSchema defaults restored to false', () => {
+  const parsed = itemSchema.parse(item);
+  expect(parsed.restored).toBe(false);
+  expect(itemSchema.parse({ ...item, restored: true }).restored).toBe(true);
 });

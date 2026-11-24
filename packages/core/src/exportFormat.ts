@@ -25,7 +25,7 @@ const rowBase = {
   updatedBy: z.string().nullable(),
 };
 
-const workspaceSchema = z.object({
+export const workspaceSchema = z.object({
   ...rowBase,
   name: z.string(),
   emoji: z.string().nullable(),
@@ -35,7 +35,7 @@ const workspaceSchema = z.object({
 
 const tabGroupColorSchema = z.enum(['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange']);
 
-const categorySchema = z.object({
+export const categorySchema = z.object({
   ...rowBase,
   workspaceId: uuid,
   name: z.string(),
@@ -45,7 +45,7 @@ const categorySchema = z.object({
   shareToken: z.string().nullable(),
 });
 
-const itemSchema = z.object({
+export const itemSchema = z.object({
   ...rowBase,
   categoryId: uuid,
   kind: z.enum(['link', 'note', 'todo']),
@@ -56,9 +56,10 @@ const itemSchema = z.object({
   note: z.string().nullable(),
   body: z.unknown().nullable(),
   done: z.boolean(),
+  restored: z.boolean().default(false),
 });
 
-const reminderSchema = z.object({
+export const reminderSchema = z.object({
   ...rowBase,
   itemId: uuid,
   userId: z.string(),

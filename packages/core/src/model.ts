@@ -40,6 +40,8 @@ export interface Item extends RowBase {
   /** TipTap JSON for note items. */
   body: unknown | null;
   done: boolean;
+  /** Set by the server when a push put this item back under a parent another device had deleted. */
+  restored: boolean;
 }
 
 export interface Reminder extends RowBase {

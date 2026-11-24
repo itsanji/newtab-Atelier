@@ -172,7 +172,7 @@ export function createItem(
     const row: Item = {
       ...base(now), ...(input.id ? { id: input.id } : {}), categoryId: input.categoryId, kind: input.kind, sortKey, title: input.title,
       url: input.url ?? null, faviconUrl: input.faviconUrl ?? null, note: input.note ?? null,
-      body: input.body ?? null, done: false,
+      body: input.body ?? null, done: false, restored: false,
     };
     return save(db, 'items', row, now);
   });
