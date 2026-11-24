@@ -6,6 +6,8 @@ import type { Category } from '@atelier/core';
 import { useDb } from '../data/DbContext';
 import { liveItems } from '../data/queries';
 import { deleteCategory, updateCategory } from '../data/repo';
+import { Button } from '../ui/components/Button';
+import { Dialog } from '../ui/components/Dialog';
 import { Tag } from '../ui/components/Tag';
 import { InlineNameField } from './InlineNameField';
 import { Menu } from '../ui/components/Menu';
@@ -28,14 +30,30 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
   const items = useLiveQuery(() => liveItems(db, category.id), [db, category.id]) ?? [];
   const [renaming, setRenaming] = useState(false);
   const [freshNote, setFreshNote] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  /** Set when a confirmed delete starts: where focus goes once the column (and its dialog) unmounts. */
+  const afterDelete = useRef<HTMLElement | null>(null);
 
   const startRename = () => setRenaming(true);
 
   // The column unmounts on delete, so hand focus to the next column heading, or else the New category tile.
-  const remove = async () => {
+  const nextFocus = () => {
     const next = section.current?.nextElementSibling;
-    const target = next?.querySelector<HTMLElement>('.atl-title-btn') ?? next?.querySelector<HTMLElement>('.atl-newcat-btn');
+    return next?.querySelector<HTMLElement>('.atl-title-btn') ?? next?.querySelector<HTMLElement>('.atl-newcat-btn') ?? null;
+  };
+  const remove = async () => {
+    const target = nextFocus();
     if (await run(deleteCategory(db, category.id))) target?.focus();
+  };
+  // An empty category goes at once; one with saved items asks first.
+  const askRemove = () => (items.length > 0 ? setConfirming(true) : void remove());
+  const confirmRemove = async () => {
+    afterDelete.current = nextFocus();
+    // On success the column unmounts, closing the dialog, which then focuses `afterDelete`.
+    if (!(await run(deleteCategory(db, category.id)))) {
+      afterDelete.current = null;
+      setConfirming(false);
+    }
   };
 
   return (
@@ -65,7 +83,7 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
           triggerClassName="atl-icon"
           items={[
             { label: 'Rename', onSelect: startRename },
-            { label: 'Delete', danger: true, onSelect: () => void remove() },
+            { label: 'Delete', danger: true, onSelect: askRemove },
           ]}
         />
       </div>
@@ -79,6 +97,18 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
       })}
       </SortableContext>
       </CategoryNameContext.Provider>
+      <Dialog
+        open={confirming}
+        title={`Delete ${category.name}?`}
+        returnFocusTo={() => afterDelete.current ?? section.current?.querySelector<HTMLElement>('.atl-title-btn') ?? null}
+        onClose={() => setConfirming(false)}
+      >
+        <p>This also deletes its {items.length} saved {items.length === 1 ? 'item' : 'items'}.</p>
+        <div className="atl-form-actions">
+          <Button variant="danger" onClick={() => void confirmRemove()}>Delete category</Button>
+          <Button variant="ghost" onClick={() => setConfirming(false)}>Cancel</Button>
+        </div>
+      </Dialog>
       <div className="atl-column-foot">
         <AddItemMenu categoryId={category.id} onCreated={setFreshNote} />
         <button type="button" className="atl-textlink" onClick={() => onOpenAll?.()}>Open all</button>

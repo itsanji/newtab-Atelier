@@ -221,6 +221,53 @@ describe('focus after delete', () => {
   });
 });
 
+describe('deleting a category', () => {
+  async function withItems(n: number) {
+    render(<App db={db} />);
+    const col = await screen.findByRole('region', { name: 'Saved' });
+    const cat = (await liveCategories(db, (await liveWorkspaces(db))[0]!.id))[0]!;
+    for (let i = 0; i < n; i++) await createItem(db, { categoryId: cat.id, kind: 'link', title: `L${i}`, url: `https://l${i}.com` });
+    if (n) await within(col).findByRole('link', { name: new RegExp(`L${n - 1}`) });
+    return { col, cat };
+  }
+  const openDelete = async (user: ReturnType<typeof userEvent.setup>, col: HTMLElement) => {
+    await user.click(within(col).getByRole('button', { name: 'Category options' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+  };
+
+  test('with items, asks first; Cancel keeps it', async () => {
+    const user = userEvent.setup();
+    const { col, cat } = await withItems(2);
+    await openDelete(user, col);
+    const dialog = await screen.findByRole('dialog', { name: 'Delete Saved?' });
+    expect(dialog).toHaveTextContent('This also deletes its 2 saved items.');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect((await db.categories.get(cat.id))!.deletedAt).toBeNull();
+  });
+
+  test('with items, Delete category deletes it and its items and focuses the next heading', async () => {
+    const user = userEvent.setup();
+    const { col, cat } = await withItems(1);
+    await openDelete(user, col);
+    const dialog = await screen.findByRole('dialog', { name: 'Delete Saved?' });
+    expect(dialog).toHaveTextContent('This also deletes its 1 saved item.');
+    await user.click(within(dialog).getByRole('button', { name: 'Delete category' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Saved' })).not.toBeInTheDocument());
+    expect((await db.categories.get(cat.id))!.deletedAt).not.toBeNull();
+    expect((await db.items.where('categoryId').equals(cat.id).toArray()).every((i) => i.deletedAt !== null)).toBe(true);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Notes' })).toHaveFocus());
+  });
+
+  test('an empty category is deleted without asking', async () => {
+    const user = userEvent.setup();
+    const { col, cat } = await withItems(0);
+    await openDelete(user, col);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(async () => expect((await db.categories.get(cat.id))!.deletedAt).not.toBeNull());
+  });
+});
+
 describe('workspace forms', () => {
   test('editing with an empty name shows an error and stays open', async () => {
     const user = userEvent.setup();
