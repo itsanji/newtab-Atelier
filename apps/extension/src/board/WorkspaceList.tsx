@@ -1,0 +1,101 @@
+import { useState } from 'react';
+import type { Workspace } from '@atelier/core';
+import { useDb } from '../data/DbContext';
+import { createWorkspace, deleteWorkspace, LastWorkspaceError, updateWorkspace } from '../data/repo';
+import { Button } from '../ui/components/Button';
+import { Dialog } from '../ui/components/Dialog';
+import { Field } from '../ui/components/Field';
+import { Icon } from '../ui/components/Icon';
+import { Menu } from '../ui/components/Menu';
+import { InlineNameField } from './InlineNameField';
+import { useSavedCount } from './useSavedCount';
+
+function WorkspaceRow({
+  ws, selected, only, onSelect,
+}: { ws: Workspace; selected: boolean; only: boolean; onSelect(): void }) {
+  const db = useDb();
+  const count = useSavedCount(ws.id);
+  const [dialog, setDialog] = useState<'edit' | 'delete' | null>(null);
+  const [name, setName] = useState(ws.name);
+  const [emoji, setEmoji] = useState(ws.emoji ?? '');
+
+  return (
+    <div className={['atl-ws', selected && 'atl-ws-active'].filter(Boolean).join(' ')}>
+      <button type="button" className="atl-ws-btn" aria-current={selected ? 'page' : undefined} onClick={onSelect}>
+        <span>{ws.emoji ? `${ws.emoji} ` : ''}{ws.name}</span>
+        <span className="atl-ws-count">{count}</span>
+      </button>
+      <Menu
+        trigger={<Icon name="more" size={18} />}
+        triggerLabel="Workspace options"
+        triggerClassName="atl-icon"
+        items={[
+          { label: 'Edit', onSelect: () => { setName(ws.name); setEmoji(ws.emoji ?? ''); setDialog('edit'); } },
+          { label: 'Delete', danger: true, disabled: only, hint: only ? 'Keep at least one workspace' : undefined, onSelect: () => setDialog('delete') },
+        ]}
+      />
+      <Dialog open={dialog === 'edit'} title="Edit workspace" onClose={() => setDialog(null)}>
+        <form
+          className="atl-form"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const n = name.trim();
+            if (n) await updateWorkspace(db, ws.id, { name: n, emoji: emoji.trim() || null });
+            setDialog(null);
+          }}
+        >
+          <Field label="Name" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
+          <Field label="Emoji" hint="Optional" value={emoji} onChange={(e) => setEmoji(e.target.value)} />
+          <div className="atl-form-actions">
+            <Button type="submit">Save workspace</Button>
+            <Button type="button" variant="ghost" onClick={() => setDialog(null)}>Cancel</Button>
+          </div>
+        </form>
+      </Dialog>
+      <Dialog open={dialog === 'delete'} title="Delete this workspace?" onClose={() => setDialog(null)}>
+        <p>Its categories and saved items go with it.</p>
+        <div className="atl-form-actions">
+          <Button
+            variant="danger"
+            onClick={async () => {
+              try { await deleteWorkspace(db, ws.id); } catch (e) { if (!(e instanceof LastWorkspaceError)) throw e; }
+              setDialog(null);
+            }}
+          >
+            Delete workspace
+          </Button>
+          <Button variant="ghost" onClick={() => setDialog(null)}>Cancel</Button>
+        </div>
+      </Dialog>
+    </div>
+  );
+}
+
+export function WorkspaceList({
+  workspaces, selectedId, onSelect,
+}: { workspaces: Workspace[]; selectedId: string; onSelect(id: string): void }) {
+  const db = useDb();
+  const [adding, setAdding] = useState(false);
+
+  return (
+    <nav aria-label="Workspaces" className="atl-workspaces">
+      <p className="im-eyebrow">Workspaces</p>
+      {workspaces.map((ws) => (
+        <WorkspaceRow key={ws.id} ws={ws} selected={ws.id === selectedId} only={workspaces.length <= 1} onSelect={() => onSelect(ws.id)} />
+      ))}
+      {adding ? (
+        <InlineNameField
+          label="Workspace name"
+          placeholder="Name this workspace"
+          onCancel={() => setAdding(false)}
+          onCommit={async (name) => {
+            setAdding(false);
+            if (name) onSelect((await createWorkspace(db, { name })).id);
+          }}
+        />
+      ) : (
+        <Button variant="ghost" onClick={() => setAdding(true)}>+ New workspace</Button>
+      )}
+    </nav>
+  );
+}
