@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Role } from '../sync/api';
+import { roleFrom } from '../data/role';
 import { useAccount } from '../account/account';
 import { useDb } from '../data/DbContext';
 
@@ -20,9 +21,7 @@ export function useRole(workspaceId: string): Role {
     members: (await db.members.where('workspaceId').equals(workspaceId).toArray()).filter((m) => !m.deletedAt),
   }), [db, workspaceId]);
   if (!account || !state) return 'owner';
-  const mine = state.members.find((m) => m.userId === account.userId);
-  if (mine) return mine.role;
-  return state.ownerId && state.ownerId !== account.userId ? 'viewer' : 'owner';
+  return roleFrom(state.ownerId, state.members, account.userId);
 }
 
 const RoleContext = createContext<Role>('owner');

@@ -10,6 +10,7 @@ import { ensureSeed } from '../data/seed';
 import { LAST_CATEGORY_KEY } from '../data/target';
 import { faviconUrl } from '../chrome/favicon';
 import { isSavableTab, listWindowTabs, saveAll as saveAllTabs } from '../chrome/tabs';
+import { editableWorkspaces } from '../data/role';
 import { syncNow } from '../sync/localWrites';
 import { NoticeProvider, useRun } from '../board/Notice';
 import { Button } from '../ui/components/Button';
@@ -34,17 +35,20 @@ async function currentTab(): Promise<chrome.tabs.Tab | undefined> {
 
 async function load(db: AtelierDB): Promise<Loaded> {
   await ensureSeed(db);
-  const workspaces = await liveWorkspaces(db);
+  const all = await liveWorkspaces(db);
+  // Viewer workspaces are never save targets; if every workspace is read-only the popup can't save.
+  const editable = await editableWorkspaces(db, all);
   const storedWs = await getMeta<string>(db, 'selectedWorkspaceId');
-  const workspace = workspaces.find((w) => w.id === storedWs) ?? workspaces[0]!;
-  const categories = await liveCategories(db, workspace.id);
+  const workspace = editable.find((w) => w.id === storedWs) ?? editable[0] ?? all[0]!;
+  const canSave = editable.some((w) => w.id === workspace.id);
+  const categories = canSave ? await liveCategories(db, workspace.id) : [];
   const last = await getMeta<string>(db, LAST_CATEGORY_KEY);
   const tab = await currentTab();
   const stored = (await chrome.storage.local.get('closeAfterSave')).closeAfterSave;
   return {
     tab, workspace, categories,
     selectedId: categories.find((c) => c.id === last)?.id ?? categories[0]?.id,
-    windowTabs: (await listWindowTabs(tab?.windowId)).length,
+    windowTabs: canSave ? (await listWindowTabs(tab?.windowId)).length : 0,
     closeAfterSave: typeof stored === 'boolean' ? stored : true,
   };
 }
