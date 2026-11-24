@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { AtelierDB } from '../data/db';
 import { DbProvider, useDb } from '../data/DbContext';
+import { useAccount } from '../account/account';
+import { useLiveSync } from '../sync/live';
 import { ActiveDbProvider } from '../account/activeDb';
 import { buildIndex, search } from '../data/search';
 import { SearchResults } from '../board/SearchResults';
@@ -83,6 +85,11 @@ function Shell({ db }: { db: AtelierDB }) {
   );
 }
 
+function LiveSync() {
+  useLiveSync(useAccount());
+  return null;
+}
+
 function Ready() {
   const db = useDb();
   const [ready, setReady] = useState(false);
@@ -94,6 +101,7 @@ function Ready() {
   if (!ready) return null;
   return (
     <NoticeProvider>
+      <LiveSync />
       <Shell db={db} />
     </NoticeProvider>
   );

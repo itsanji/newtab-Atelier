@@ -2,6 +2,7 @@ import { getActiveDb } from '../account/activeDb';
 import { createMenus, onMenuClicked } from './contextMenus';
 import { onCommand } from './commands';
 import { notify } from './notify';
+import { registerSync } from '../sync/schedule';
 import { checkReminders, onNotificationClicked, onReminderAlarm, syncAlarms } from './reminders';
 
 const report = (e: unknown) => console.error(e);
@@ -24,3 +25,4 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 chrome.contextMenus.onClicked.addListener((info, tab) => void getActiveDb().then((db) => onMenuClicked(db, info, tab)).catch(saveFailed));
 chrome.commands.onCommand.addListener((command) => void getActiveDb().then((db) => onCommand(db, command)).catch(saveFailed));
+registerSync();
