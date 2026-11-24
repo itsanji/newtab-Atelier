@@ -13,6 +13,7 @@ import { saveTab, savedLabel } from '../chrome/tabs';
 import { createCategory, moveCategory, moveItem, tx } from '../data/repo';
 import { IconButton } from '../ui/components/IconButton';
 import { useNotify, useRun } from './Notice';
+import { useCanEdit } from './useRole';
 import { domainOf } from './url';
 
 export type Placement = 'before' | 'after';
@@ -208,8 +209,8 @@ export function BoardDnd({ children }: { children: ReactNode }) {
 }
 
 /** Makes the New category tile a drop target for items and tabs. */
-export function useNewCategoryDrop(workspaceId: string) {
-  return useDroppable({ id: `newcat:${workspaceId}`, data: { type: 'newcat', workspaceId, title: 'a new category' } });
+export function useNewCategoryDrop(workspaceId: string, disabled = false) {
+  return useDroppable({ id: `newcat:${workspaceId}`, disabled, data: { type: 'newcat', workspaceId, title: 'a new category' } });
 }
 
 /** Sortable wiring for an item row: `rowProps` go on the row, `handle` renders the grip. */
@@ -218,9 +219,10 @@ export const CategoryNameContext = createContext('');
 export function useSortableItem(item: Item, pointerOnRow: boolean) {
   const categoryName = useContext(CategoryNameContext);
   const label = item.title || (item.kind === 'link' ? domainOf(item.url ?? '') : '') || (item.kind === 'note' ? 'note' : 'item');
-  const s = useSortable({ id: item.id, data: { type: 'item', title: label, categoryId: item.categoryId, categoryName } });
+  const canEdit = useCanEdit();
+  const s = useSortable({ id: item.id, disabled: !canEdit, data: { type: 'item', title: label, categoryId: item.categoryId, categoryName } });
   const style: CSSProperties = { transform: CSS.Translate.toString(s.transform), transition: s.transition, opacity: s.isDragging ? 0.4 : undefined };
-  const handle = (
+  const handle = !canEdit ? null : (
     <IconButton
       label="Drag to move"
       icon="grip"
@@ -231,6 +233,6 @@ export function useSortableItem(item: Item, pointerOnRow: boolean) {
     />
   );
   const onPointerDown = s.listeners?.onPointerDown as PointerEventHandler<HTMLElement> | undefined;
-  const rowProps = pointerOnRow && onPointerDown ? { onPointerDown } : {};
+  const rowProps = canEdit && pointerOnRow && onPointerDown ? { onPointerDown } : {};
   return { setNodeRef: s.setNodeRef, style, handle, rowProps };
 }

@@ -24,6 +24,7 @@ export type Row = { id: string; deletedAt: string | null; updatedAt: string; upd
 
 /** Write a changed row and its outbox entry. Call inside a transaction. */
 export async function save<R extends Row>(db: AtelierDB, table: TableName, row: R, now: string): Promise<R> {
+  saves++;
   await db.table(table).put(row);
   await enqueue(db, table, row, now);
   return row;
@@ -42,6 +43,8 @@ function base(now: string) {
 export const stamp = (now: string) => ({ updatedAt: now, updatedBy: currentUserId() });
 
 const writeListeners = new Set<() => void>();
+/** Count of rows queued so far; a transaction that leaves it unchanged wrote nothing and notifies no one. */
+let saves = 0;
 
 /** Call `fn` after every committed local mutation (not sync writes). Returns an unsubscribe function. */
 export function onLocalWrite(fn: () => void): () => void {
@@ -52,9 +55,11 @@ export function onLocalWrite(fn: () => void): () => void {
 /** Run a mutation in one rw transaction; the outermost one notifies `onLocalWrite` listeners once it commits. */
 export function tx<T>(db: AtelierDB, fn: () => Promise<T>): Promise<T> {
   const nested = Dexie.currentTransaction != null;
+  const before = saves;
   const done = db.transaction('rw', [db.workspaces, db.categories, db.items, db.reminders, db.outbox], fn);
   if (nested) return done;
   return done.then((result) => {
+    if (saves === before) return result;
     for (const listener of [...writeListeners]) {
       try {
         listener();
@@ -84,6 +89,26 @@ export function appendKey(last: string | null): string {
   }
 }
 
+/**
+ * `plain` with a random 3-char suffix, so keys generated on two devices for the same gap differ.
+ * Kept only if it still sorts strictly between `lo` and `hi` and is a valid key.
+ */
+function jitter(plain: string, lo: string | null, hi: string | null): string {
+  const key = plain + randomChar(KEY_CHARS) + randomChar(KEY_CHARS) + randomChar(KEY_CHARS.slice(1));
+  if ((lo !== null && key <= lo) || (hi !== null && key >= hi)) return plain;
+  try {
+    keyBetween(key, null);
+    return key;
+  } catch {
+    return plain;
+  }
+}
+
+/** A key before `first` (the start of a list) with a random suffix. */
+export function prependKey(first: string | null): string {
+  return jitter(keyBetween(null, first), null, first);
+}
+
 async function keyFor<S extends { id: string; sortKey: string }>(
   db: AtelierDB, table: TableName, beforeId: string | null, afterId: string | null,
 ): Promise<string> {
@@ -92,7 +117,7 @@ async function keyFor<S extends { id: string; sortKey: string }>(
   // Equal or inverted neighbour keys have no room between them: place it right after `before` instead.
   if (before && after && before.sortKey >= after.sortKey) return appendKey(before.sortKey);
   if (!after) return appendKey(before?.sortKey ?? null);
-  return keyBetween(before?.sortKey ?? null, after.sortKey);
+  return jitter(keyBetween(before?.sortKey ?? null, after.sortKey), before?.sortKey ?? null, after.sortKey);
 }
 
 // Workspaces
@@ -157,7 +182,7 @@ export function createCategory(
     await live<Workspace>(db, 'workspaces', input.workspaceId);
     const siblings = await liveCategories(db, input.workspaceId);
     const sortKey = opts.position === 'start'
-      ? keyBetween(null, siblings[0]?.sortKey ?? null)
+      ? prependKey(siblings[0]?.sortKey ?? null)
       : appendKey(siblings.at(-1)?.sortKey ?? null);
     const row: Category = {
       ...base(now), workspaceId: input.workspaceId, name: input.name, emoji: input.emoji ?? null,
@@ -211,7 +236,7 @@ export function createItem(
     const sortKey = input.beforeId !== undefined || input.afterId !== undefined
       ? await keyFor(db, 'items', input.beforeId ?? null, input.afterId ?? null)
       : input.position === 'start'
-        ? keyBetween(null, siblings[0]?.sortKey ?? null)
+        ? prependKey(siblings[0]?.sortKey ?? null)
         : appendKey(siblings.at(-1)?.sortKey ?? null);
     const row: Item = {
       ...base(now), ...(input.id ? { id: input.id } : {}), categoryId: input.categoryId, kind: input.kind, sortKey, title: input.title,
@@ -228,7 +253,7 @@ export function updateItem(
   return tx(db, async () => {
     const now = clock.now();
     const cur = await live<Item>(db, 'items', id);
-    return save(db, 'items', { ...cur, ...patch, ...stamp(now) }, now);
+    return save(db, 'items', { ...cur, ...patch, restored: false, ...stamp(now) }, now);
   });
 }
 
@@ -240,7 +265,7 @@ export function moveItem(
     const cur = await live<Item>(db, 'items', id);
     await live<Category>(db, 'categories', target.categoryId);
     const sortKey = await keyFor(db, 'items', target.beforeId, target.afterId);
-    return save(db, 'items', { ...cur, categoryId: target.categoryId, sortKey, ...stamp(now) }, now);
+    return save(db, 'items', { ...cur, categoryId: target.categoryId, sortKey, restored: false, ...stamp(now) }, now);
   });
 }
 

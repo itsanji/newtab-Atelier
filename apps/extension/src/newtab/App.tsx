@@ -17,6 +17,8 @@ import { BoardDnd } from '../board/dnd';
 import { Sidebar } from '../board/Sidebar';
 import { useHighlightItem } from '../board/useHighlightItem';
 import { AccountEntry } from '../board/AccountDialog';
+import { RoleProvider } from '../board/useRole';
+import { useRecoveredNotice } from '../board/useRecovered';
 import { CURSOR_KEY } from '../sync/engine';
 
 const SELECTED_KEY = 'selectedWorkspaceId';
@@ -28,6 +30,7 @@ function Shell({ db }: { db: AtelierDB }) {
   // `null` means "no choice stored"; `undefined` means "still loading".
   const stored = useLiveQuery(async () => (await getMeta<string>(db, SELECTED_KEY)) ?? null, [db]);
   const highlight = useHighlightItem();
+  useRecoveredNotice();
   const [query, setQuery] = useState('');
   const trimmed = query.trim();
   // Rows are read and indexed only while there is something to search for.
@@ -65,6 +68,7 @@ function Shell({ db }: { db: AtelierDB }) {
     <BoardDnd>
     <div className="atl-shell">
       <Sidebar workspaces={workspaces} selectedId={selected.id} onSelect={(id) => void run(setMeta(db, SELECTED_KEY, id))} />
+      <RoleProvider workspaceId={selected.id}>
       <main className="atl-main">
         <BoardHeader workspace={selected} query={query} onQueryChange={setQuery} theme={theme} />
         {trimmed ? (
@@ -82,6 +86,7 @@ function Shell({ db }: { db: AtelierDB }) {
           <Board key={selected.id} workspace={selected} />
         )}
       </main>
+      </RoleProvider>
     </div>
     </BoardDnd>
   );

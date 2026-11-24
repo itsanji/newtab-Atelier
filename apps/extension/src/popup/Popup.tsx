@@ -10,6 +10,7 @@ import { ensureSeed } from '../data/seed';
 import { LAST_CATEGORY_KEY } from '../data/target';
 import { faviconUrl } from '../chrome/favicon';
 import { isSavableTab, listWindowTabs, saveAll as saveAllTabs } from '../chrome/tabs';
+import { syncNow } from '../sync/localWrites';
 import { NoticeProvider, useRun } from '../board/Notice';
 import { Button } from '../ui/components/Button';
 import { Dabs } from '../ui/components/Dabs';
@@ -80,6 +81,7 @@ function PopupBody({ initial }: { initial: Loaded }) {
     })());
     setBusy(false);
     if (!ok) return;
+    syncNow(); // not debounced: the popup may close right away
     if (closeAfterSave) window.close();
     else setSaved(`Saved to ${selected.name}`);
   };
@@ -91,6 +93,7 @@ function PopupBody({ initial }: { initial: Loaded }) {
     const ok = await run(saveAllTabs(db, workspace.id, { windowId: tab?.windowId, close: closeAfterSave }).then((r) => { count = r.saved; }));
     setBusy(false);
     if (!ok) return;
+    syncNow(); // not debounced: the popup may close right away
     if (closeAfterSave) window.close();
     else setSaved(`Saved ${count} ${count === 1 ? 'tab' : 'tabs'} to ${workspace.name}`);
   };

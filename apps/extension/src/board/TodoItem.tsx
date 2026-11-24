@@ -13,11 +13,13 @@ import { InlineNameField } from './InlineNameField';
 import { useRun } from './Notice';
 import { removeAndRefocus } from './removeItem';
 import { useSortableItem } from './dnd';
+import { useCanEdit } from './useRole';
 
 export function TodoItem({ item }: { item: Item }) {
   const db = useDb();
   const run = useRun();
   const row = useRef<HTMLDivElement | null>(null);
+  const canEdit = useCanEdit();
   const dnd = useSortableItem(item, false);
   const [editing, setEditing] = useState(false);
   const reminder = useLiveQuery(
@@ -46,9 +48,11 @@ export function TodoItem({ item }: { item: Item }) {
             type="checkbox"
             className="atl-check"
             checked={item.done}
+            disabled={!canEdit}
             onChange={(e) => void run(updateItem(db, item.id, { done: e.target.checked }))}
           />
           <span className={item.done ? 'atl-todo-done' : undefined}>{item.title}</span>
+          {item.restored && <Tag tone="ochre">Restored</Tag>}
           {reminder && !item.done && reminder.remindedAt === null && (
             <Tag tone={Date.parse(reminder.remindAt) <= Date.now() ? 'rose' : 'ochre'}>
               {reminderLabel(reminder.remindAt, new Date())}
@@ -56,7 +60,7 @@ export function TodoItem({ item }: { item: Item }) {
           )}
         </label>
       )}
-      {!editing && (
+      {!editing && canEdit && (
         <div className="atl-item-menu">
           <ReminderPicker itemId={item.id} hasReminder={!!reminder && reminder.remindedAt === null} />
           <Menu

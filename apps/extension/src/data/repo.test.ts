@@ -228,4 +228,38 @@ describe('sort-key jitter and local-write hook', () => {
     await createWorkspace(db, { name: 'after off' });
     expect(calls).toHaveBeenCalledTimes(3);
   });
+
+  test('onLocalWrite does not fire for a transaction that wrote nothing', async () => {
+    const calls = vi.fn();
+    const off = onLocalWrite(calls);
+    try {
+      await tx(db, async () => { await db.items.count(); });
+      expect(calls).not.toHaveBeenCalled();
+    } finally {
+      off();
+    }
+  });
+
+  test('prepended and inserted keys get a random suffix and stay in order', async () => {
+    const { cat } = await setup();
+    const a = await item(cat.id, 'a');
+    const b = await item(cat.id, 'b');
+    const starts = new Set<string>();
+    for (let n = 0; n < 5; n++) starts.add((await createItem(db, { categoryId: cat.id, kind: 'link', title: 'p', position: 'start' })).sortKey);
+    expect(starts.size).toBe(5);
+    const between = await createItem(db, { categoryId: cat.id, kind: 'link', title: 'm', beforeId: a.id, afterId: b.id });
+    expect(between.sortKey > a.sortKey && between.sortKey < b.sortKey).toBe(true);
+    const keys = (await liveItems(db, cat.id)).map((i) => i.title);
+    expect(keys.slice(-3)).toEqual(['a', 'm', 'b']);
+    expect(keys.slice(0, 5)).toEqual(['p', 'p', 'p', 'p', 'p']);
+  });
+
+  test('updating or moving an item clears restored', async () => {
+    const { cat } = await setup();
+    const it = await item(cat.id, 'r');
+    await db.items.put({ ...it, restored: true });
+    expect((await updateItem(db, it.id, { title: 'r2' })).restored).toBe(false);
+    await db.items.put({ ...(await db.items.get(it.id))!, restored: true });
+    expect((await moveItem(db, it.id, { categoryId: cat.id, beforeId: null, afterId: null })).restored).toBe(false);
+  });
 });

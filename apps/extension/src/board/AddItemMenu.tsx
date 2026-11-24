@@ -4,6 +4,7 @@ import { createItem } from '../data/repo';
 import { Menu } from '../ui/components/Menu';
 import { Icon } from '../ui/components/Icon';
 import { useRun } from './Notice';
+import { useCanEdit, VIEW_ONLY } from './useRole';
 import { LinkForm } from './LinkForm';
 import { InlineNameField } from './InlineNameField';
 
@@ -11,6 +12,7 @@ export function AddItemMenu({ categoryId, onCreated }: { categoryId: string; onC
   const db = useDb();
   const run = useRun();
   const [adding, setAdding] = useState<'link' | 'todo' | null>(null);
+  const canEdit = useCanEdit();
 
   if (adding === 'link') {
     return (
@@ -44,6 +46,13 @@ export function AddItemMenu({ categoryId, onCreated }: { categoryId: string; onC
     onCreated?.(id);
     void run(createItem(db, { id, categoryId, kind: 'note', title: '', body: null }));
   };
+  if (!canEdit) {
+    return (
+      <button type="button" className="im-btn im-btn-ghost" disabled title={VIEW_ONLY}>
+        <Icon name="plus" size={16} /> Add
+      </button>
+    );
+  }
   return (
     <Menu
       trigger={<><Icon name="plus" size={16} /> Add</>}
