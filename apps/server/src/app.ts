@@ -4,6 +4,7 @@ import type { Config } from './config';
 import type { MailTransport } from './mail';
 import { createHub, type Hub } from './live/hub';
 import { authRoutes } from './auth/routes';
+import { syncRoutes } from './sync/routes';
 
 export interface Deps {
   sql: SQL;
@@ -11,11 +12,13 @@ export interface Deps {
   /** Null when SMTP is not configured. */
   mail: MailTransport | null;
   now?: () => Date;
+  /** Live-change notifier; defaults to the app's own hub. */
+  hub?: Hub;
 }
 
 export function createApp(deps: Deps): { app: Hono; websocket: unknown; hub: Hub } {
   const { config } = deps;
-  const hub = createHub();
+  const hub = deps.hub ?? createHub();
   const app = new Hono();
   const now = deps.now ?? (() => new Date());
 
@@ -29,6 +32,7 @@ export function createApp(deps: Deps): { app: Hono; websocket: unknown; hub: Hub
   );
 
   app.route('/api/auth', authRoutes(deps.sql, config, now));
+  app.route('/api/sync', syncRoutes(deps.sql, config, now, hub));
 
   app.notFound((c) => (c.req.path.startsWith('/api/') ? c.json({ error: 'Not found' }, 404) : c.text('Not found', 404)));
   app.onError((err, c) => {

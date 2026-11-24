@@ -47,7 +47,7 @@ export interface TestApp {
 }
 
 export async function makeApp(
-  overrides: { config?: Partial<Config>; now?: () => Date; mail?: MailTransport | null } = {},
+  overrides: { config?: Partial<Config>; now?: () => Date; mail?: MailTransport | null; hub?: Hub } = {},
 ): Promise<TestApp> {
   const db = await freshDb();
   const mail = memoryTransport();
@@ -56,6 +56,7 @@ export async function makeApp(
     config: testConfig({ databaseUrl: db.url, ...overrides.config }),
     mail: overrides.mail === undefined ? mail : overrides.mail,
     ...(overrides.now ? { now: overrides.now } : {}),
+    ...(overrides.hub ? { hub: overrides.hub } : {}),
   });
   return { app, sql: db.sql, mail, hub, close: db.drop };
 }
