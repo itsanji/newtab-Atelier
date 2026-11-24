@@ -1,4 +1,4 @@
-import { itemSchema, type Category, type Item, type Iso, type TableName, type Workspace } from '@atelier/core';
+import { isLinkUrl, itemSchema, type Category, type Item, type Iso, type Reminder, type TableName, type Workspace } from '@atelier/core';
 import { enqueue, outboxKey, type AtelierDB, type Member, type OutboxEntry } from '../data/db';
 import { appendKey, clock } from '../data/repo';
 import { getMeta, liveCategories, liveItems, liveWorkspaces } from '../data/queries';
@@ -121,7 +121,8 @@ async function untombstone(db: AtelierDB, table: 'workspaces' | 'categories', ro
 
 /**
  * Handle rows the server rejected. Rejected items (live ones) are copied with new ids into a
- * "Recovered" category of the user's first owned workspace and queued; every rejected row is
+ * "Recovered" category of the user's first owned workspace (made valid, see `syncableItem`) and
+ * queued, with any reminder rejected alongside re-pointed to the copy; every rejected row is
  * removed locally with its outbox entry. Resets the pull cursor so the next pull brings back the
  * server's copy of anything that was dropped. Returns the number of items copied.
  */
@@ -132,31 +133,80 @@ export async function recover(
   return db.transaction('rw', syncTables(db), async () => {
     const t = now();
     const items: Item[] = [];
+    const reminders: Reminder[] = [];
     for (const { table, row } of rows) {
       const id = (row as { id: string }).id;
       await db.outbox.delete(outboxKey(table, id));
       await db.table(table).delete(id);
       // A rejected delete has nothing to keep.
-      if (table === 'items' && (row as Item).deletedAt === null) items.push(row as Item);
+      if ((row as { deletedAt?: unknown }).deletedAt != null) continue;
+      if (table === 'items') items.push(row as Item);
+      if (table === 'reminders') reminders.push(row as Reminder);
     }
+    const copyOf = new Map<string, string>();
     if (items.length) {
       const cat = await recoveredCategory(db, userId, t);
       let last = (await liveItems(db, cat.id)).at(-1)?.sortKey ?? null;
       for (const item of items) {
-        const copy: Item = {
+        const copy = syncableItem({
           ...item, id: crypto.randomUUID(), categoryId: cat.id, sortKey: appendKey(last),
           createdAt: t, updatedAt: t, updatedBy: userId, deletedAt: null, restored: false,
-        };
+        });
         last = copy.sortKey;
+        copyOf.set(item.id, copy.id);
         await db.items.put(copy);
-        // A copy the server would reject again (invalid content) stays on this device only,
-        // rather than bouncing between "rejected" and "recovered" on every sync.
-        if (itemSchema.safeParse(copy).success) await enqueue(db, 'items', copy, t);
+        await enqueue(db, 'items', copy, t);
       }
+    }
+    // A reminder rejected along with its item follows the copy.
+    for (const rem of reminders) {
+      const itemId = copyOf.get(rem.itemId);
+      if (!itemId) continue;
+      const copy: Reminder = { ...rem, id: crypto.randomUUID(), itemId, userId, createdAt: t, updatedAt: t, updatedBy: userId, deletedAt: null };
+      await db.reminders.put(copy);
+      await enqueue(db, 'reminders', copy, t);
     }
     await db.meta.put({ key: CURSOR_KEY, value: 0 });
     return items.length;
   });
+}
+
+const paragraphs = (texts: string[]) => ({
+  type: 'doc',
+  content: texts.filter(Boolean).map((text) => ({ type: 'paragraph', content: [{ type: 'text', text }] })),
+});
+const asText = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v));
+
+/**
+ * Make a recovered copy the server will accept, keeping everything the user wrote: a url that isn't
+ * an allowed link (e.g. `javascript:`) moves into the text (a link becomes a note), other bad fields
+ * are coerced. Anything still invalid becomes a note holding the original row as text.
+ */
+export function syncableItem(item: Item): Item {
+  if (itemSchema.safeParse(item).success) return item;
+  const fixed: Item = {
+    ...item,
+    kind: (['link', 'note', 'todo'] as const).includes(item.kind) ? item.kind : 'note',
+    title: asText(item.title),
+    faviconUrl: typeof item.faviconUrl === 'string' ? item.faviconUrl : null,
+    note: item.note == null ? null : asText(item.note),
+    done: typeof item.done === 'boolean' ? item.done : false,
+  };
+  if (fixed.url != null && (typeof fixed.url !== 'string' || !isLinkUrl(fixed.url))) {
+    const urlText = asText(fixed.url);
+    fixed.url = null;
+    if (fixed.kind === 'link') {
+      fixed.kind = 'note';
+      fixed.body = fixed.body == null ? paragraphs([urlText]) : paragraphs([urlText, asText(fixed.body)]);
+    } else {
+      fixed.note = fixed.note ? `${fixed.note}\n${urlText}` : urlText;
+    }
+  }
+  if (itemSchema.safeParse(fixed).success) return fixed;
+  return {
+    ...fixed, kind: 'note', url: null, faviconUrl: null, note: null, done: false,
+    body: paragraphs([fixed.title, JSON.stringify(item)]),
+  };
 }
 
 /** True when the user owns the workspace, or it was created here and never synced. */
@@ -261,8 +311,17 @@ export function syncOnce(db: AtelierDB, account: Account, api: SyncApi, now: () 
   const run: Promise<SyncResult> = withLock(name, () => {
     if (queued.get(name) === run) queued.delete(name);
     return runSync(db, account, api, now);
+  }).catch(async (e: unknown) => {
+    // The lock itself failed (aborted, unavailable): report it instead of throwing.
+    console.error(e);
+    const message = e instanceof Error ? e.message : String(e);
+    await status(account.partition, 'error', message);
+    return { ok: false, state: 'error' as const, pulled: 0, ...emptySummary(), error: message };
   });
   queued.set(name, run);
+  void run.finally(() => {
+    if (queued.get(name) === run) queued.delete(name);
+  });
   return run;
 }
 
@@ -283,7 +342,12 @@ async function runSync(db: AtelierDB, account: Account, api: SyncApi, now: () =>
     const pulled = await applyPull(db, await api.pull(cursor));
     result.pulled = pulled.pulled;
     result.remindersChanged ||= pulled.remindersChanged;
-    if ((await db.outbox.count()) > 0) addSummary(result, await pushOutbox(db, api, account.userId, now));
+    if ((await db.outbox.count()) > 0) {
+      const again = await pushOutbox(db, api, account.userId, now);
+      addSummary(result, again);
+      // That push may have queued Recovered copies (e.g. edits in a workspace the pull just removed): send them too.
+      if (again.recovered > 0) addSummary(result, await pushOutbox(db, api, account.userId, now));
+    }
   } catch (e) {
     result.ok = false;
     result.state = e instanceof UnauthorizedError ? 'paused' : e instanceof OfflineError ? 'offline' : 'error';

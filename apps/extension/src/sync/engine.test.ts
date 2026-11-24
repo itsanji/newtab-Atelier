@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import type { Category, Item, Reminder, Workspace } from '@atelier/core';
+import { itemSchema, type Category, type Item, type Reminder, type Workspace } from '@atelier/core';
+import { noteText } from '../data/noteText';
 import { installChromeFake, type ChromeFake } from '../../test/chromeFake';
 import { openDb, outboxKey, type AtelierDB } from '../data/db';
 import { clock, createCategory, createItem, createWorkspace, setReminder, updateItem } from '../data/repo';
@@ -160,6 +161,19 @@ describe('pushOutbox', () => {
     expect(await takeRecovered(account.partition)).toBe(0); // only syncOnce reports to status
   });
 
+  test('a push response that does not match the request keeps the outbox', async () => {
+    await setup();
+    const before = await db.outbox.count();
+    const { api } = fakeApi();
+    api.push.mockResolvedValueOnce({ results: [] });
+    await expect(pushOutbox(db, api)).rejects.toThrow('Unexpected push response');
+    api.push.mockImplementationOnce(async (changes: Change[]) => ({
+      results: changes.map((c) => ({ table: c.table, id: 'someone-else', status: 'applied' as const })),
+    }));
+    await expect(pushOutbox(db, api)).rejects.toThrow('Unexpected push response');
+    expect(await db.outbox.count()).toBe(before);
+  });
+
   test('push failure keeps outbox', async () => {
     await setup();
     const before = await db.outbox.count();
@@ -190,16 +204,40 @@ describe('recover', () => {
     }
   });
 
-  test('an item the server finds invalid is kept locally but not re-queued', async () => {
-    const { ws, item } = await setup();
+  test('rejected item with invalid url is recovered as a valid, queued row', async () => {
+    const { ws, cat } = await setup();
     await db.outbox.clear();
-    const bad = { ...item, url: 'javascript:alert(1)' };
-    await db.items.put(bad);
-    expect(await recover(db, [{ table: 'items', row: bad }], USER)).toBe(1);
+    const link = { ...(await createItem(db, { categoryId: cat.id, kind: 'link', title: 'Bad link', url: 'https://ok.example' })), url: 'javascript:alert(1)', note: 'my note' };
+    const todo = { ...(await createItem(db, { categoryId: cat.id, kind: 'todo', title: 'Do it' })), url: 'chrome://settings' };
+    const weird = { ...link, id: crypto.randomUUID(), kind: 'bogus', title: 42, done: 'yes', faviconUrl: 7, url: null } as unknown as Item;
+    await db.outbox.clear();
+    expect(await recover(db, [{ table: 'items', row: link }, { table: 'items', row: todo }, { table: 'items', row: weird }], USER)).toBe(3);
     const recoveredCat = (await liveCategories(db, ws.id)).find((c) => c.name === 'Recovered')!;
     const copies = await liveItems(db, recoveredCat.id);
-    expect(copies.map((c) => c.url)).toEqual(['javascript:alert(1)']);
-    expect((await db.outbox.toArray()).map((e) => e.table)).toEqual(['categories']);
+    expect(copies).toHaveLength(3);
+    for (const c of copies) expect(itemSchema.safeParse(c).success).toBe(true);
+    const [l, t, w] = copies;
+    // The link's url text survives as a note item; nothing the user typed is lost.
+    expect(l).toMatchObject({ kind: 'note', url: null, title: 'Bad link', note: 'my note' });
+    expect(noteText(l!.body)).toContain('javascript:alert(1)');
+    expect(t).toMatchObject({ kind: 'todo', url: null, title: 'Do it', note: 'chrome://settings' });
+    expect(w).toMatchObject({ kind: 'note', title: '42', done: false, faviconUrl: null });
+    // Every copy is queued.
+    const queued = (await db.outbox.where('key').startsWith('items:').toArray()).map((e) => e.rowId).sort();
+    expect(queued).toEqual(copies.map((c) => c.id).sort());
+  });
+
+  test('reminders rejected with their item follow the recovered copy', async () => {
+    const { item } = await setup();
+    const rem = await setReminder(db, item.id, ts(40));
+    const n = await recover(db, [{ table: 'items', row: item }, { table: 'reminders', row: rem }], USER);
+    expect(n).toBe(1);
+    const copyRem = (await db.reminders.toArray()).filter((r) => r.deletedAt === null);
+    expect(copyRem).toHaveLength(1);
+    expect(copyRem[0]).toMatchObject({ remindAt: ts(40), userId: USER, remindedAt: null });
+    expect(copyRem[0]!.itemId).not.toBe(item.id);
+    expect((await db.items.get(copyRem[0]!.itemId))!.title).toBe(item.title);
+    expect(await db.outbox.get(outboxKey('reminders', copyRem[0]!.id))).toBeDefined();
   });
 
   test('reuses an existing Recovered category', async () => {
@@ -381,6 +419,52 @@ describe('syncOnce', () => {
     expect(maxActive).toBe(1);
     // The first run pushed everything; the queued ones coalesced into one follow-up run.
     expect(api.pull.mock.calls.length).toBeLessThanOrEqual(2);
+  });
+
+  test('edits in a workspace the user was removed from end up in Recovered', async () => {
+    const { ws } = await setup();
+    const shared = serverWs(crypto.randomUUID());
+    const sharedCat = serverCat(crypto.randomUUID(), shared.id);
+    await applyPull(db, { ...emptyPull(3), workspaces: [shared], categories: [sharedCat],
+      members: [{ id: crypto.randomUUID(), workspaceId: shared.id, userId: USER, email: 'u@x.io', role: 'editor', displayName: null, deletedAt: null }] });
+    await pushOutbox(db, fakeApi().api);
+    let written: Item | undefined;
+    const { api } = fakeApi({
+      // The server no longer lets this user write to the shared workspace.
+      decide: (c) => (c.table === 'items' && (c.row as Item).categoryId === sharedCat.id ? 'rejected' : 'applied'),
+      pull: async (cursor) => {
+        if (cursor === 3) {
+          // The user writes in the shared category while the pull that removes them is in flight.
+          written = await createItem(db, { categoryId: sharedCat.id, kind: 'note', title: 'written meanwhile', body: { type: 'doc' } });
+          return { ...emptyPull(6), removedWorkspaceIds: [shared.id] };
+        }
+        return emptyPull(cursor);
+      },
+    });
+    const r = await syncOnce(db, account, api);
+    expect(r).toMatchObject({ ok: true, recovered: 1 });
+    expect(await db.workspaces.get(shared.id)).toBeUndefined();
+    expect(await db.items.get(written!.id)).toBeUndefined();
+    const recoveredCat = (await liveCategories(db, ws.id)).find((c) => c.name === 'Recovered')!;
+    expect((await liveItems(db, recoveredCat.id)).map((i) => i.title)).toEqual(['written meanwhile']);
+    expect(await db.outbox.count()).toBe(0);
+  });
+
+  test('a failed lock request does not jam later syncs', async () => {
+    await setup();
+    const nav = globalThis.navigator as Navigator & { locks?: unknown };
+    const had = Object.getOwnPropertyDescriptor(nav, 'locks');
+    Object.defineProperty(nav, 'locks', { configurable: true, value: { request: () => Promise.reject(new Error('lock aborted')) } });
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const r = await syncOnce(db, account, fakeApi().api);
+      expect(r).toMatchObject({ ok: false, state: 'error' });
+    } finally {
+      logged.mockRestore();
+      if (had) Object.defineProperty(nav, 'locks', had);
+      else delete (nav as { locks?: unknown }).locks;
+    }
+    expect((await syncOnce(db, account, fakeApi().api)).ok).toBe(true);
   });
 
   test('a stored status with no chrome.storage.session does not break sync', async () => {
