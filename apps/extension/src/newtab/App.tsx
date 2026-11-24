@@ -25,13 +25,15 @@ function Shell({ db }: { db: AtelierDB }) {
   const stored = useLiveQuery(async () => (await getMeta<string>(db, SELECTED_KEY)) ?? null, [db]);
   const highlight = useHighlightItem();
   const [query, setQuery] = useState('');
-  const rows = useLiveQuery(async () => ({
+  const trimmed = query.trim();
+  // Rows are read and indexed only while there is something to search for.
+  const searching = trimmed !== '';
+  const rows = useLiveQuery(async () => (searching ? {
     workspaces: await db.workspaces.filter((r) => r.deletedAt === null).toArray(),
     categories: await db.categories.filter((r) => r.deletedAt === null).toArray(),
     items: await db.items.filter((r) => r.deletedAt === null).toArray(),
-  }), [db]);
+  } : null), [db, searching]);
   const index = useMemo(() => (rows ? buildIndex(rows) : null), [rows]);
-  const trimmed = query.trim();
   const hits = useMemo(() => (index && trimmed ? search(index, trimmed) : []), [index, trimmed]);
   const urls = useMemo(() => new Map((rows?.items ?? []).flatMap((i) => (i.url ? [[i.id, i.url] as const] : []))), [rows]);
   const focused = useRef(false);
@@ -62,7 +64,8 @@ function Shell({ db }: { db: AtelierDB }) {
       <main className="atl-main">
         <BoardHeader workspace={selected} query={query} onQueryChange={setQuery} theme={theme} />
         {trimmed ? (
-          <SearchResults
+          // Until the index is ready there is nothing to show, rather than a false "no results".
+          index && <SearchResults
             query={trimmed}
             hits={hits}
             urls={urls}

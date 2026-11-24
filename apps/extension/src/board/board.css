@@ -141,3 +141,5 @@ a { color: var(--lily); }
 .atl-column-head .atl-emoji-btn:not(:has(span)) { opacity: 0; }
 .atl-column-head:hover .atl-emoji-btn, .atl-column-head:focus-within .atl-emoji-btn, .atl-column-head .atl-emoji:has([aria-expanded="true"]) .atl-emoji-btn { opacity: 1; }
 .atl-data { margin-top: auto; }
+
+.atl-crash { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); padding: var(--space-5); color: var(--ink); background: var(--canvas); }

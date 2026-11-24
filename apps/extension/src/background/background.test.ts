@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { installChromeFake, type ChromeFake } from '../../test/chromeFake';
 import { openDb, type AtelierDB } from '../data/db';
 import { getMeta, liveCategories, liveItems, liveWorkspaces, setMeta } from '../data/queries';
@@ -44,10 +44,22 @@ describe('context menus', () => {
     await onMenuClicked(db, { menuItemId: 'save-link', linkUrl: 'https://l.com/p', selectionText: '  Great read ' });
     const [item] = await liveItems(db, notes!.id);
     expect(item).toMatchObject({ kind: 'link', title: 'Great read', url: 'https://l.com/p' });
-    expect(item!.faviconUrl).toContain('_favicon');
+    expect(item!.faviconUrl).toBeNull();
     expect(fake.notifications.create).toHaveBeenCalledWith(
       expect.any(String), expect.objectContaining({ message: 'Saved to Notes', title: 'Atelier' }),
     );
+  });
+
+  test('save-link refuses links that are not http, https, file or ftp', async () => {
+    const [first] = await cats();
+    for (const linkUrl of ['javascript:alert(1)', 'data:text/html,hi', 'chrome://settings', 'mailto:a@b.c']) {
+      await onMenuClicked(db, { menuItemId: 'save-link', linkUrl });
+      expect(fake.notifications.create).toHaveBeenLastCalledWith(
+        expect.any(String), expect.objectContaining({ message: "This link can't be saved" }),
+      );
+    }
+    await onMenuClicked(db, { menuItemId: 'save-link', linkUrl: 'ftp://f.test/x' });
+    expect((await liveItems(db, first!.id)).map((i) => i.url)).toEqual(['ftp://f.test/x']);
   });
 
   test('save-link falls back to the url as title', async () => {
@@ -83,5 +95,25 @@ describe('commands', () => {
   test('ignores other commands', async () => {
     await onCommand(db, 'other');
     expect(fake.notifications.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('service worker wiring', () => {
+  test('a failed context-menu or shortcut save shows a notification', async () => {
+    vi.resetModules();
+    vi.doMock('./contextMenus', () => ({ createMenus: vi.fn(async () => {}), onMenuClicked: vi.fn(async () => { throw new Error('boom'); }) }));
+    vi.doMock('./commands', () => ({ onCommand: vi.fn(async () => { throw new Error('boom'); }) }));
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await import('./index');
+    const failed = expect.objectContaining({ message: "Couldn't save this page" });
+    fake.contextMenus.onClicked.dispatch({ menuItemId: 'save-page' });
+    await vi.waitFor(() => expect(fake.notifications.create).toHaveBeenCalledWith(expect.any(String), failed));
+    fake.notifications.create.mockClear();
+    fake.commands.onCommand.dispatch('save-current-tab');
+    await vi.waitFor(() => expect(fake.notifications.create).toHaveBeenCalledWith(expect.any(String), failed));
+    expect(errors).toHaveBeenCalledTimes(2);
+    errors.mockRestore();
+    vi.doUnmock('./contextMenus');
+    vi.doUnmock('./commands');
   });
 });

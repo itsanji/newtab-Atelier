@@ -8,6 +8,7 @@ import { Dabs } from './Dabs';
 import { IconButton } from './IconButton';
 import { Menu } from './Menu';
 import { Dialog } from './Dialog';
+import { ErrorBoundary } from './ErrorBoundary';
 import { installChromeFake } from '../../../test/chromeFake';
 
 test('Button primary has primary class', () => {
@@ -175,5 +176,24 @@ describe('Dialog focus restoration', () => {
     rerender(<Host open withOpener />);
     rerender(<Host open={false} withOpener={false} />);
     expect(screen.getByRole('button', { name: 'fallback' })).toHaveFocus();
+  });
+});
+
+describe('ErrorBoundary', () => {
+  function Boom(): never {
+    throw new Error('boom');
+  }
+  test('renders children when nothing throws', () => {
+    render(<ErrorBoundary><p>fine</p></ErrorBoundary>);
+    expect(screen.getByText('fine')).toBeInTheDocument();
+  });
+  test('a render error shows the message and a Reload button', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onReload = vi.fn();
+    render(<ErrorBoundary onReload={onReload}><Boom /></ErrorBoundary>);
+    expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Reload the page.');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Reload' }));
+    expect(onReload).toHaveBeenCalled();
+    errors.mockRestore();
   });
 });

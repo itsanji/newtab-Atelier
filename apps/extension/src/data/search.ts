@@ -29,7 +29,8 @@ export function buildIndex(rows: { items: Item[]; categories: Category[]; worksp
   const index = new MiniSearch<Doc>({
     fields: ['title', 'url', 'note', 'text'],
     storeFields: ['title', 'kind', 'categoryId', 'categoryName', 'workspaceId', 'workspaceName'],
-    searchOptions: { prefix: true, fuzzy: 0.2, boost: { title: 2 } },
+    // Every word must match: more words narrow the results.
+    searchOptions: { prefix: true, fuzzy: 0.2, boost: { title: 2 }, combineWith: 'AND' },
   });
   const workspaces = new Map(rows.workspaces.filter((w) => w.deletedAt === null).map((w) => [w.id, w]));
   const categories = new Map(rows.categories.filter((c) => c.deletedAt === null).map((c) => [c.id, c]));

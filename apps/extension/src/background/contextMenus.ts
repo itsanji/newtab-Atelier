@@ -1,7 +1,7 @@
+import { isLinkUrl } from '@atelier/core';
 import type { AtelierDB } from '../data/db';
 import { createItem } from '../data/repo';
 import { resolveTargetCategory } from '../data/target';
-import { faviconUrl } from '../chrome/favicon';
 import { isSavableTab, saveTab } from '../chrome/tabs';
 import { notify } from './notify';
 
@@ -21,10 +21,11 @@ export async function onMenuClicked(
     return notify(`Saved to ${category.name}`);
   }
   if (info.menuItemId === 'save-link' && info.linkUrl) {
+    if (!isLinkUrl(info.linkUrl)) return notify("This link can't be saved");
     const category = await resolveTargetCategory(db);
     await createItem(db, {
       categoryId: category.id, kind: 'link', title: info.selectionText?.trim() || info.linkUrl,
-      url: info.linkUrl, faviconUrl: faviconUrl(info.linkUrl),
+      url: info.linkUrl, faviconUrl: null,
     });
     notify(`Saved to ${category.name}`);
   }

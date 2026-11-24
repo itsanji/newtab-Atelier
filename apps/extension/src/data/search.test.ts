@@ -28,6 +28,15 @@ describe('search', () => {
     ]);
   });
 
+  test('multi-word queries need every word to match', async () => {
+    const ws = await createWorkspace(db, { name: 'W' });
+    const cat = await createCategory(db, { workspaceId: ws.id, name: 'C' });
+    const both = await createItem(db, { categoryId: cat.id, kind: 'link', title: 'React hooks guide', url: 'https://a.test' });
+    await createItem(db, { categoryId: cat.id, kind: 'link', title: 'React compiler', url: 'https://b.test' });
+    await createItem(db, { categoryId: cat.id, kind: 'link', title: 'Fishing hooks', url: 'https://c.test' });
+    expect(search(buildIndex(await rows()), 'react hooks').map((h) => h.itemId)).toEqual([both.id]);
+  });
+
   test('finds a note by a word in its body', async () => {
     const ws = await createWorkspace(db, { name: 'W' });
     const cat = await createCategory(db, { workspaceId: ws.id, name: 'C' });
