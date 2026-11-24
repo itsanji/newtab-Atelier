@@ -128,6 +128,7 @@ type DragData = {
 /**
  * Columns reorder by closest corners. Everything else drops only where the pointer is: a sidebar
  * workspace first, then an item, then a column or the New category tile. Over nothing, no target.
+ * Keyboard drags (no pointer) take the closest target by corners.
  */
 export const collisions: CollisionDetection = (args) => {
   const type = (args.active.data.current as DragData | undefined)?.type;
@@ -137,6 +138,8 @@ export const collisions: CollisionDetection = (args) => {
       droppableContainers: args.droppableContainers.filter((c) => (c.data.current as DragData | undefined)?.type === 'category'),
     });
   }
+  // Keyboard drags have no pointer: they move by the sortable coordinates, so take the closest target.
+  if (!args.pointerCoordinates) return closestCorners(args);
   const hits = pointerWithin(args);
   const kindOf = (id: unknown) => (args.droppableContainers.find((c) => c.id === id)?.data.current as DragData | undefined)?.type;
   const rank = (id: unknown) => (kindOf(id) === 'workspace' ? 0 : kindOf(id) === 'item' ? 1 : 2);

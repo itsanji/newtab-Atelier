@@ -62,8 +62,12 @@ describe('collisions', () => {
     expect(run('item', { x: 150, y: 600 }, board)).toEqual([]);
     expect(run('tab', { x: 150, y: 600 }, board)).toEqual([]);
   });
-  test('no pointer gives no target', () => {
-    expect(run('item', null, board)).toEqual([]);
+  test('a keyboard drag (no pointer) takes the closest target, not a far workspace', () => {
+    const near: [string, Kind, ClientRect][] = [
+      ['ws1', 'workspace', rect(0, 0, 100, 40)],
+      ['it1', 'item', rect(495, 495, 20, 20)],
+    ];
+    expect(run('item', null, near)[0]).toBe('it1');
   });
   test('an item under the pointer wins over its column', () => {
     expect(run('item', { x: 250, y: 60 }, board)[0]).toBe('it1');
