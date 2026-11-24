@@ -7,6 +7,7 @@ import { authRoutes } from './auth/routes';
 import { syncRoutes } from './sync/routes';
 import { memberRoutes } from './members/routes';
 import { liveRoutes } from './live/routes';
+import { shareApiRoutes, sharePublicRoutes } from './share/routes';
 import { websocket } from 'hono/bun';
 
 export interface Deps {
@@ -37,6 +38,8 @@ export function createApp(deps: Deps): { app: Hono; websocket: typeof websocket;
   app.route('/api/auth', authRoutes(deps.sql, config, now));
   app.route('/api/sync', syncRoutes(deps.sql, config, now, hub));
   app.route('/api/workspaces', memberRoutes(deps.sql, config, now, hub, deps.mail));
+  app.route('/api/categories', shareApiRoutes(deps.sql, config, now, hub));
+  app.route('/', sharePublicRoutes(deps.sql));
   app.route('/api/live', liveRoutes(deps.sql, config.sessionSecret, now, hub));
 
   app.notFound((c) => (c.req.path.startsWith('/api/') ? c.json({ error: 'Not found' }, 404) : c.text('Not found', 404)));
