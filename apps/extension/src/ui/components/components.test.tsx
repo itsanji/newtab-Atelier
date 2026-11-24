@@ -160,4 +160,20 @@ describe('Dialog focus restoration', () => {
     rerender(<Host open={false} />);
     expect(opener).toHaveFocus();
   });
+  test('falls back to returnFocusTo when the opener is gone', () => {
+    function Host({ open, withOpener }: { open: boolean; withOpener: boolean }) {
+      return (
+        <div>
+          {withOpener && <button>opener</button>}
+          <button>fallback</button>
+          <Dialog open={open} title="T" onClose={() => {}} returnFocusTo={() => screen.getByRole('button', { name: 'fallback' })}>x</Dialog>
+        </div>
+      );
+    }
+    const { rerender } = render(<Host open={false} withOpener />);
+    screen.getByRole('button', { name: 'opener' }).focus();
+    rerender(<Host open withOpener />);
+    rerender(<Host open={false} withOpener={false} />);
+    expect(screen.getByRole('button', { name: 'fallback' })).toHaveFocus();
+  });
 });

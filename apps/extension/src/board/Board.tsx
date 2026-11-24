@@ -6,10 +6,12 @@ import { liveCategories } from '../data/queries';
 import { createCategory } from '../data/repo';
 import { InlineNameField } from './InlineNameField';
 import { Icon } from '../ui/components/Icon';
+import { useRun } from './Notice';
 import { CategoryColumn } from './CategoryColumn';
 
 export function Board({ workspace }: { workspace: Workspace }) {
   const db = useDb();
+  const run = useRun();
   const categories = useLiveQuery(() => liveCategories(db, workspace.id), [db, workspace.id]) ?? [];
   const [adding, setAdding] = useState(false);
 
@@ -24,7 +26,7 @@ export function Board({ workspace }: { workspace: Workspace }) {
             onCancel={() => setAdding(false)}
             onCommit={(name) => {
               setAdding(false);
-              if (name) void createCategory(db, { workspaceId: workspace.id, name });
+              if (name) void run(createCategory(db, { workspaceId: workspace.id, name }));
             }}
           />
         ) : (

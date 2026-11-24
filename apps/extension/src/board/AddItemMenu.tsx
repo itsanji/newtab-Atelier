@@ -3,10 +3,12 @@ import { useDb } from '../data/DbContext';
 import { createItem } from '../data/repo';
 import { Menu } from '../ui/components/Menu';
 import { Icon } from '../ui/components/Icon';
+import { useRun } from './Notice';
 import { LinkForm } from './LinkForm';
 
 export function AddItemMenu({ categoryId }: { categoryId: string }) {
   const db = useDb();
+  const run = useRun();
   const [adding, setAdding] = useState<'link' | null>(null);
 
   if (adding === 'link') {
@@ -15,7 +17,7 @@ export function AddItemMenu({ categoryId }: { categoryId: string }) {
         submitLabel="Add link"
         onCancel={() => setAdding(null)}
         onSubmit={async ({ url, title }) => {
-          await createItem(db, { categoryId, kind: 'link', title, url });
+          await run(createItem(db, { categoryId, kind: 'link', title, url }));
           setAdding(null);
         }}
       />

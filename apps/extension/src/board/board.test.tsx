@@ -1,12 +1,13 @@
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../newtab/App';
 import { openDb, type AtelierDB } from '../data/db';
-import { createItem } from '../data/repo';
+import { createItem, deleteItem } from '../data/repo';
 import { liveCategories, liveWorkspaces } from '../data/queries';
 import { ItemRow } from './ItemRow';
 import { DbProvider } from '../data/DbContext';
+import { NoticeProvider } from './Notice';
 import { faviconUrl } from '../chrome/favicon';
 import { installChromeFake } from '../../test/chromeFake';
 
@@ -146,11 +147,114 @@ describe('ItemRow', () => {
     })();
     const long = 'Very long title '.repeat(20).trim().slice(0, 300);
     const item = await createItem(db, { categoryId: cat.id, kind: 'link', title: long, url: 'https://example.com' });
-    render(<DbProvider db={db}><ItemRow item={item} /></DbProvider>);
+    render(<DbProvider db={db}><NoticeProvider><ItemRow item={item} /></NoticeProvider></DbProvider>);
     const el = screen.getByTitle(long);
     expect(el).toHaveAttribute('title', long);
     expect(el.style.textOverflow).toBe('ellipsis');
     expect(el.style.whiteSpace).toBe('nowrap');
     expect(el.style.overflow).toBe('hidden');
+  });
+});
+
+describe('failure feedback', () => {
+  async function seededItem() {
+    const { ensureSeed } = await import('../data/seed');
+    await ensureSeed(db);
+    const ws = (await liveWorkspaces(db))[0]!;
+    const cat = (await liveCategories(db, ws.id))[0]!;
+    return createItem(db, { categoryId: cat.id, kind: 'link', title: 'Gone', url: 'https://gone.com' });
+  }
+  async function deleteFromMenu() {
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Link options' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+  }
+
+  test('NotFoundError shows the removed-in-another-tab notice', async () => {
+    const item = await seededItem();
+    await deleteItem(db, item.id);
+    render(<DbProvider db={db}><NoticeProvider><ItemRow item={item} /></NoticeProvider></DbProvider>);
+    await deleteFromMenu();
+    expect(await screen.findByRole('status')).toHaveTextContent('That item was removed in another tab');
+  });
+
+  test('a generic failure shows a retry notice and logs the error', async () => {
+    const item = await seededItem();
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<DbProvider db={db}><NoticeProvider><ItemRow item={item} /></NoticeProvider></DbProvider>);
+    db.close();
+    await deleteFromMenu();
+    expect(await screen.findByRole('status')).toHaveTextContent('Something went wrong. Try again.');
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
+describe('focus after delete', () => {
+  test('deleting an item focuses the next row, else the column heading', async () => {
+    const user = userEvent.setup();
+    render(<App db={db} />);
+    const col = await screen.findByRole('region', { name: 'Saved' });
+    const cat = (await liveCategories(db, (await liveWorkspaces(db))[0]!.id))[0]!;
+    await createItem(db, { categoryId: cat.id, kind: 'link', title: 'First', url: 'https://one.com' });
+    await createItem(db, { categoryId: cat.id, kind: 'link', title: 'Second', url: 'https://two.com' });
+    await within(col).findByRole('link', { name: /Second/ });
+    await user.click(within(col).getAllByRole('button', { name: 'Link options' })[0]!);
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await waitFor(() => expect(within(col).queryByRole('link', { name: /First/ })).not.toBeInTheDocument());
+    await waitFor(() => expect(within(col).getByRole('link', { name: /Second/ })).toHaveFocus());
+    await user.click(within(col).getByRole('button', { name: 'Link options' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await waitFor(() => expect(within(col).getByRole('button', { name: 'Saved' })).toHaveFocus());
+  });
+
+  test('deleting a category focuses the next heading, else the New category tile', async () => {
+    const user = userEvent.setup();
+    render(<App db={db} />);
+    await screen.findByRole('region', { name: 'Saved' });
+    await user.click(within(screen.getByRole('region', { name: 'Saved' })).getByRole('button', { name: 'Category options' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Notes' })).toHaveFocus());
+    await user.click(within(screen.getByRole('region', { name: 'Notes' })).getByRole('button', { name: 'Category options' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /New category/ })).toHaveFocus());
+  });
+});
+
+describe('workspace forms', () => {
+  test('editing with an empty name shows an error and stays open', async () => {
+    const user = userEvent.setup();
+    render(<App db={db} />);
+    await user.click(await screen.findByRole('button', { name: 'Workspace options' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Edit' }));
+    await user.clear(screen.getByLabelText('Name'));
+    await user.click(screen.getByRole('button', { name: 'Save workspace' }));
+    expect(screen.getByText('Give the workspace a name')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Edit workspace' })).toBeInTheDocument();
+  });
+
+  test('creating a workspace does not commit on blur; Create commits', async () => {
+    const user = userEvent.setup();
+    render(<App db={db} />);
+    await user.click(await screen.findByRole('button', { name: /New workspace/ }));
+    await user.type(screen.getByRole('textbox', { name: 'Workspace name' }), 'Stray');
+    await user.click(document.body);
+    expect(screen.getByRole('textbox', { name: 'Workspace name' })).toHaveValue('Stray');
+    expect((await liveWorkspaces(db)).length).toBe(1);
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+    await screen.findByRole('heading', { level: 1, name: 'Stray' });
+    expect((await liveWorkspaces(db)).length).toBe(2);
+  });
+
+  test('blur with an empty field cancels; Escape cancels', async () => {
+    const user = userEvent.setup();
+    render(<App db={db} />);
+    await user.click(await screen.findByRole('button', { name: /New workspace/ }));
+    await user.click(document.body);
+    expect(screen.queryByRole('textbox', { name: 'Workspace name' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /New workspace/ }));
+    await user.type(screen.getByRole('textbox', { name: 'Workspace name' }), 'x{Escape}');
+    expect(screen.queryByRole('textbox', { name: 'Workspace name' })).not.toBeInTheDocument();
+    expect((await liveWorkspaces(db)).length).toBe(1);
   });
 });

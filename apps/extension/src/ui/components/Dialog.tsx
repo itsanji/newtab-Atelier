@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 
-export function Dialog({ open, title, onClose, children }: { open: boolean; title: string; onClose(): void; children: ReactNode }) {
+export function Dialog({ open, title, onClose, returnFocusTo, children }: { open: boolean; title: string; onClose(): void; /** Used when the opener is gone by the time the dialog closes. */ returnFocusTo?: () => HTMLElement | null; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -13,6 +13,7 @@ export function Dialog({ open, title, onClose, children }: { open: boolean; titl
     return () => {
       if (el.open) el.close();
       if (opener?.isConnected) opener.focus();
+      else returnFocusTo?.()?.focus();
     };
   }, [open]);
 
