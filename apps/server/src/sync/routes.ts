@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import type { SQL } from 'bun';
 import type { TableName } from '@atelier/core';
 import type { Config } from '../config';
@@ -9,6 +10,7 @@ import { pull } from './pull';
 import { TABLES } from './rows';
 
 const MAX_CHANGES = 1000;
+const MAX_PUSH_BYTES = 5 * 1024 * 1024;
 
 function parseChanges(body: unknown): PushChange[] | null {
   const changes = (body as { changes?: unknown } | null)?.changes;
@@ -24,7 +26,12 @@ export function syncRoutes(sql: SQL, config: Config, now: () => Date, hub: Hub):
   const routes = new Hono<AuthEnv>();
   routes.use('*', requireUser(sql, config.sessionSecret, now));
 
-  routes.post('/push', async (c) => {
+  const pushLimit = bodyLimit({
+    maxSize: MAX_PUSH_BYTES,
+    onError: (c) => c.json({ error: 'That push is too large. Send fewer changes at once' }, 413),
+  });
+
+  routes.post('/push', pushLimit, async (c) => {
     const changes = parseChanges(await c.req.json().catch(() => null));
     if (!changes) return c.json({ error: 'Send 1 to 1000 changes, each with a known table and a row' }, 400);
     const user = c.get('user');

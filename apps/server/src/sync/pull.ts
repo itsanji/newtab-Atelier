@@ -10,6 +10,13 @@ export interface PullResponse {
   reminders: Reminder[];
   members: Member[];
   removedWorkspaceIds: string[];
+  /** Rows moved out of a visible workspace into one the caller cannot see: delete them locally. */
+  goneRows: GoneRow[];
+}
+
+export interface GoneRow {
+  table: 'categories' | 'items';
+  id: string;
 }
 
 /**
@@ -52,7 +59,29 @@ export async function pull(sql: SQL, userId: string, cursor: number): Promise<Pu
         where m.workspace_id = any(${visible}::uuid[]) and (m.version > ${cursor} or m.workspace_id = any(${full}::uuid[]))
         order by m.version`,
     ];
-    for (const rows of [workspaces, categories, items, reminders, members]) {
+    // Moves out of a visible workspace whose row now sits in a workspace the caller cannot see.
+    const moves = await tx`
+      with moves as (
+        select table_name, row_id, max(version) as version from row_moves
+        where version > ${cursor} and from_workspace_id = any(${visible}::uuid[])
+        group by table_name, row_id
+      )
+      select m.table_name, m.row_id, m.version from moves m
+        left join categories c on m.table_name = 'categories' and c.id = m.row_id
+        left join items i on m.table_name = 'items' and i.id = m.row_id
+        left join categories ic on ic.id = i.category_id
+      where not (coalesce(c.workspace_id, ic.workspace_id) = any(${visible}::uuid[]))
+      order by m.version`;
+    const gone = new Map<string, GoneRow>();
+    for (const m of moves) gone.set(`${m.table_name}:${m.row_id}`, { table: m.table_name, id: m.row_id });
+    const goneCategoryIds = moves.filter((m: { table_name: string }) => m.table_name === 'categories').map((m: { row_id: string }) => m.row_id);
+    if (goneCategoryIds.length > 0) {
+      // A category that left takes its items with it.
+      const orphans = await tx`select id from items where category_id = any(${goneCategoryIds}::uuid[])`;
+      for (const o of orphans) gone.set(`items:${o.id}`, { table: 'items', id: o.id });
+    }
+
+    for (const rows of [workspaces, categories, items, reminders, members, moves]) {
       for (const r of rows) max = Math.max(max, Number(r.version));
     }
 
@@ -64,6 +93,7 @@ export async function pull(sql: SQL, userId: string, cursor: number): Promise<Pu
       reminders: reminders.map(reminderToWire),
       members: members.map(memberToWire),
       removedWorkspaceIds,
+      goneRows: [...gone.values()],
     };
   });
 }

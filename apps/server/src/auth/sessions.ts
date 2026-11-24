@@ -1,4 +1,5 @@
 import type { SQL } from 'bun';
+import { CHANGE_LOCK } from '../sync/lock';
 
 export const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const REFRESH_AFTER_MS = 60 * 60 * 1000;
@@ -42,7 +43,10 @@ export async function userForToken(sql: SQL, secret: string, token: string, now:
 
 /** Links invites sent to this email before the account existed. Bumps `version` so members' clients pull the change. */
 export async function attachPendingInvites(sql: SQL, user: { id: string; email: string }, now: Date = new Date()): Promise<void> {
-  await sql`update workspace_members
-    set user_id = ${user.id}, version = nextval('change_seq'), updated_at = ${now}
-    where email = ${user.email.toLowerCase()} and user_id is null`;
+  await sql.begin(async (tx) => {
+    await tx`select pg_advisory_xact_lock(${CHANGE_LOCK})`;
+    await tx`update workspace_members
+      set user_id = ${user.id}, version = nextval('change_seq'), updated_at = ${now}
+      where email = ${user.email.toLowerCase()} and user_id is null`;
+  });
 }

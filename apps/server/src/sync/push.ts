@@ -13,11 +13,9 @@ import {
 import { canEdit, roleIn } from './permissions';
 import { jsonParam, TABLES } from './rows';
 
-/**
- * Advisory lock every writer that assigns `change_seq` versions must hold (transaction-level), so versions
- * commit in order and a pull's cursor never jumps over a version that commits later.
- */
-export const CHANGE_LOCK = 1;
+import { CHANGE_LOCK } from './lock';
+
+export { CHANGE_LOCK };
 
 export interface PushChange {
   table: TableName;
@@ -117,6 +115,12 @@ async function restoreCategory({ tx, user, now }: Ctx, id: string): Promise<void
     updated_at = greatest(${now}, updated_at + interval '1 millisecond') where id = ${id}`;
 }
 
+/** Remembers a move out of a workspace at the row's new version, so pull can tell those left behind. */
+async function recordMove(tx: SQL, table: 'categories' | 'items', id: string, fromWorkspaceId: string): Promise<void> {
+  await tx`insert into row_moves (table_name, row_id, from_workspace_id, version)
+    values (${table}, ${id}, ${fromWorkspaceId}, currval('change_seq'))`;
+}
+
 async function applyWorkspace(ctx: Ctx, w: Workspace): Promise<Outcome> {
   const { tx, user, now, touched } = ctx;
   const [existing] = await tx`select deleted_at from workspaces where id = ${w.id}`;
@@ -166,6 +170,7 @@ async function applyCategory(ctx: Ctx, c: Category): Promise<Outcome> {
         ${now}, ${c.deletedAt}, ${user.id}, nextval('change_seq'))`;
   }
   if (moved) {
+    await recordMove(tx, 'categories', c.id, existing.workspace_id);
     // Members of the destination pull by version: give the moved category's items one they have not seen.
     await tx`update items set version = nextval('change_seq') where category_id = ${c.id}`;
     touched.add(existing.workspace_id);
@@ -212,7 +217,10 @@ async function applyItem(ctx: Ctx, i: Item): Promise<Outcome> {
         ${body}::text::jsonb, ${i.done}, ${restored}, ${i.createdAt}, ${now}, ${i.deletedAt}, ${user.id},
         nextval('change_seq'))`;
   }
-  if (moved) touched.add(existing.workspace_id);
+  if (moved) {
+    await recordMove(tx, 'items', i.id, existing.workspace_id);
+    touched.add(existing.workspace_id);
+  }
   touched.add(parent.workspace_id);
   return restoredNow ? { status: 'restored' } : applied;
 }

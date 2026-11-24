@@ -16,6 +16,7 @@ type Pull = {
   reminders: Row[];
   members: Row[];
   removedWorkspaceIds: string[];
+  goneRows: { table: 'categories' | 'items'; id: string }[];
 };
 
 const T0 = '2026-01-01T00:00:00.000Z';
@@ -159,6 +160,7 @@ describe('sync', () => {
       reminders: [],
       members: [],
       removedWorkspaceIds: [],
+      goneRows: [],
     });
 
     // an edit shows up after the cursor, and only the edited row
@@ -477,5 +479,94 @@ describe('sync', () => {
 
     expect(seen.size).toBe(expected.size);
     for (const id of expected) expect(seen.has(id)).toBe(true);
+  });
+
+  test("row moved to a workspace the other user can't see shows up in goneRows", async () => {
+    ctx = await makeApp();
+    const a = await seed('a@example.com');
+    const b = await signUp(ctx.app, 'b@example.com');
+    await addMember(a.w.id, b.user, 'viewer');
+    // a second category with an item, and a private workspace only A can see
+    const c2 = cat(a.w.id);
+    const i2 = item(c2.id);
+    const privateWs = ws({ name: 'Private' });
+    const privateCat = cat(privateWs.id);
+    await push(a.token, [
+      { table: 'workspaces', row: privateWs },
+      { table: 'categories', row: privateCat },
+      { table: 'categories', row: c2 },
+      { table: 'items', row: i2 },
+    ]);
+    const first = await pull(b.token, 0);
+    expect(ids(first.items)).toEqual([a.i.id, i2.id].sort());
+    expect(first.goneRows).toEqual([]);
+
+    // A moves an item into the private category and a whole category into the private workspace
+    expect((await push(a.token, [
+      { table: 'items', row: { ...a.i, categoryId: privateCat.id } },
+      { table: 'categories', row: { ...c2, workspaceId: privateWs.id } },
+    ])).map((r) => r.status)).toEqual(['applied', 'applied']);
+
+    const second = await pull(b.token, first.cursor);
+    expect(second.goneRows.map((g) => `${g.table}:${g.id}`).sort()).toEqual(
+      [`items:${a.i.id}`, `categories:${c2.id}`, `items:${i2.id}`].sort(),
+    );
+    expect([second.categories, second.items]).toEqual([[], []]);
+    expect(second.cursor).toBeGreaterThan(first.cursor);
+    expect((await pull(b.token, second.cursor)).goneRows).toEqual([]);
+
+    // A, who can see both ends, gets no goneRows
+    expect((await pull(a.token, first.cursor)).goneRows).toEqual([]);
+
+    // moving the item back makes it visible again, and no longer gone
+    await push(a.token, [{ table: 'items', row: { ...a.i, categoryId: a.c.id } }]);
+    const third = await pull(b.token, 0);
+    expect(third.goneRows.map((g) => g.id).sort()).toEqual([c2.id, i2.id].sort());
+    expect(ids(third.items)).toEqual([a.i.id]);
+  });
+
+  test('push body over 5 MB is refused', async () => {
+    ctx = await makeApp();
+    const a = await signUp(ctx.app, 'a@example.com');
+    const res = await ctx.app.request('/api/sync/push', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearer(a.token) },
+      body: JSON.stringify({ changes: [{ table: 'workspaces', row: ws({ name: 'x'.repeat(5 * 1024 * 1024) }) }] }),
+    });
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: 'That push is too large. Send fewer changes at once' });
+  });
+
+  test('attaching invites waits for an in-flight push', async () => {
+    ctx = await makeApp();
+    const owner = await seed('owner@example.com');
+    const t = new Date();
+    await ctx.sql`insert into workspace_members (id, workspace_id, user_id, email, role, created_at, updated_at, version)
+      values (${crypto.randomUUID()}, ${owner.w.id}, null, 'guest@example.com', 'editor', ${t}, ${t}, nextval('change_seq'))`;
+
+    // hold the change lock the way a push does
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let locked!: () => void;
+    const isLocked = new Promise<void>((r) => (locked = r));
+    const holder = ctx.sql.begin(async (tx) => {
+      await tx`select pg_advisory_xact_lock(1)`;
+      locked();
+      await gate;
+    });
+    await isLocked;
+
+    let signedUp = false;
+    const signup = signUp(ctx.app, 'guest@example.com').then((r) => ((signedUp = true), r));
+    await Bun.sleep(500);
+    expect(signedUp).toBe(false);
+    const [pending] = await ctx.sql`select user_id from workspace_members where email = 'guest@example.com'`;
+    expect(pending.user_id).toBeNull();
+
+    release();
+    await holder;
+    const guest = await signup;
+    const [attached] = await ctx.sql`select user_id from workspace_members where email = 'guest@example.com'`;
+    expect(attached.user_id).toBe(guest.user.id);
   });
 });

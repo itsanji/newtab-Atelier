@@ -14,7 +14,7 @@ describe('migrate', () => {
     const names = rows.map((r: { table_name: string }) => r.table_name);
     for (const t of [
       'users', 'sessions', 'workspaces', 'workspace_members', 'categories', 'items', 'reminders',
-      'magic_links', 'oauth_codes', 'oauth_states', 'schema_migrations',
+      'magic_links', 'oauth_codes', 'oauth_states', 'row_moves', 'schema_migrations',
     ]) {
       expect(names).toContain(t);
     }
@@ -28,7 +28,7 @@ describe('migrate', () => {
     await migrate(sql);
     const after = await sql`select name from schema_migrations order by name`;
     expect(after).toEqual(before);
-    expect(after.map((r: { name: string }) => r.name)).toEqual(['001_init.sql']);
+    expect(after.map((r: { name: string }) => r.name)).toEqual(['001_init.sql', '002_moves.sql']);
   });
 
   test('concurrent migrations do not clash', async () => {
@@ -36,7 +36,7 @@ describe('migrate', () => {
     try {
       await Promise.all([migrate(other), migrate(other), migrate(other)]);
       const rows = await other`select name from schema_migrations`;
-      expect(rows.length).toBe(1);
+      expect(rows.length).toBe(2);
     } finally {
       await dropOther();
     }
