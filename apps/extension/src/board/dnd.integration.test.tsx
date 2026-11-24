@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { App } from '../newtab/App';
 import { openDb, type AtelierDB } from '../data/db';
@@ -9,6 +9,7 @@ import { announcements, applyDrop } from './dnd';
 import { installChromeFake } from '../../test/chromeFake';
 
 let db: AtelierDB;
+afterEach(() => vi.restoreAllMocks());
 beforeEach(() => {
   installChromeFake();
   db = openDb('test-' + crypto.randomUUID());
@@ -75,6 +76,63 @@ describe('applyDrop', () => {
   });
 });
 
+describe('drop on the New category tile', () => {
+  const now = new Date(2026, 10, 24, 9, 5);
+  test('an item starts a category first in the workspace, in one transaction', async () => {
+    const { ws, a, mk } = await setup();
+    const x = await mk(a.id, 'x');
+    const last = (await db.outbox.orderBy('seq').last())!.seq;
+    const puts = vi.spyOn(db.outbox, 'put');
+    expect(await applyDrop(db, { active: { type: 'item', id: x.id }, over: { type: 'newcat', id: ws.id }, placement: 'after' }, now)).toBeNull();
+    const first = (await liveCategories(db, ws.id))[0]!;
+    expect(first.name).toBe('Saved 24 Nov, 09:05');
+    expect(await titles(first.id)).toEqual(['x']);
+    expect(await titles(a.id)).toEqual([]);
+    expect(puts).toHaveBeenCalledTimes(2);
+    const queued = await db.outbox.where('seq').above(last).toArray();
+    expect(queued.map((e) => e.rowId).sort()).toEqual([first.id, x.id].sort());
+  });
+
+  test('a tab starts a category holding the saved tab', async () => {
+    const { ws } = await setup();
+    const puts = vi.spyOn(db.outbox, 'put');
+    await applyDrop(db, {
+      active: { type: 'tab', id: 'tab:1', tab: { url: 'https://t.com', title: 'T' } }, over: { type: 'newcat', id: ws.id }, placement: 'after',
+    }, now);
+    const first = (await liveCategories(db, ws.id))[0]!;
+    expect(first.name).toBe('Saved 24 Nov, 09:05');
+    const [item] = await liveItems(db, first.id);
+    expect(item).toMatchObject({ title: 'T', url: 'https://t.com', faviconUrl: null });
+    expect(puts).toHaveBeenCalledTimes(2);
+  });
+
+  test('a failed save leaves no new category', async () => {
+    const { ws } = await setup();
+    const before = (await liveCategories(db, ws.id)).length;
+    await expect(applyDrop(db, { active: { type: 'item', id: 'missing' }, over: { type: 'newcat', id: ws.id }, placement: 'after' }, now)).rejects.toThrow();
+    expect((await liveCategories(db, ws.id)).length).toBe(before);
+  });
+
+  test('a category dropped there does nothing', async () => {
+    const { ws, a } = await setup();
+    const before = (await liveCategories(db, ws.id)).map((c) => c.id);
+    expect(await applyDrop(db, { active: { type: 'category', id: a.id }, over: { type: 'newcat', id: ws.id }, placement: 'after' }, now)).toBeNull();
+    expect((await liveCategories(db, ws.id)).map((c) => c.id)).toEqual(before);
+  });
+});
+
+describe('tab dropped on an item', () => {
+  test('is saved between the neighbours with exactly one outbox write', async () => {
+    const { a, mk } = await setup();
+    await mk(a.id, 'x');
+    const y = await mk(a.id, 'y');
+    const puts = vi.spyOn(db.outbox, 'put');
+    await applyDrop(db, { active: { type: 'tab', id: 'tab:1', tab: { url: 'https://t.com', title: 't' } }, over: { type: 'item', id: y.id }, placement: 'before' });
+    expect(await titles(a.id)).toEqual(['x', 't', 'y']);
+    expect(puts).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('drag handles', () => {
   test('rows and columns expose keyboard drag handles', async () => {
     await setup().then(({ a, mk }) => mk(a.id, 'x'));
@@ -86,7 +144,8 @@ describe('drag handles', () => {
 });
 
 describe('no-op drops', () => {
-  const outbox = () => db.outbox.count();
+  // Highest seq: any write, even one that replaces a row's pending entry, raises it.
+  const outbox = async () => (await db.outbox.orderBy('seq').last())?.seq ?? 0;
   test('same-position item drops do not write', async () => {
     const { a, mk } = await setup();
     const x = await mk(a.id, 'x');

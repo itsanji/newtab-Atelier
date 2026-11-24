@@ -36,7 +36,7 @@ describe('popup', () => {
     await user.click(screen.getByRole('button', { name: 'Save tab' }));
     await waitFor(async () => expect(await liveItems(db, notes!.id)).toHaveLength(1));
     const [item] = await liveItems(db, notes!.id);
-    expect(item).toMatchObject({ title: 'A page', url: 'https://a.com/x', note: 'for later' });
+    expect(item).toMatchObject({ title: 'A page', url: 'https://a.com/x', note: 'for later', faviconUrl: null });
     expect(await getMeta(db, 'lastCategoryId')).toBe(notes!.id);
     await waitFor(() => expect(fake.tabs.remove).toHaveBeenCalledWith(tab.id));
     expect(window.close).toHaveBeenCalled();
@@ -92,6 +92,30 @@ describe('popup', () => {
     await user.click(await screen.findByRole('button', { name: 'Save all 2 tabs in this window' }));
     await waitFor(() => expect(window.close).toHaveBeenCalled());
     expect(await fake.tabs.query({})).toHaveLength(0);
+  });
+
+  test('save all keeps the tabs open when close-after-saving is unchecked', async () => {
+    await fake.tabs.create({ url: 'https://a.com/', title: 'A' });
+    await fake.tabs.create({ url: 'https://b.com/', title: 'B', active: false });
+    const user = userEvent.setup();
+    render(<Popup db={db} />);
+    await user.click(await screen.findByRole('checkbox', { name: 'Close the tab after saving' }));
+    await user.click(screen.getByRole('button', { name: 'Save all 2 tabs in this window' }));
+    expect(await screen.findByText('Saved 2 tabs to My workspace')).toBeInTheDocument();
+    expect(fake.tabs.remove).not.toHaveBeenCalled();
+    expect(window.close).not.toHaveBeenCalled();
+    expect(await fake.tabs.query({})).toHaveLength(2);
+    const first = (await cats())[0]!;
+    expect((await liveItems(db, first.id)).map((i) => i.title)).toEqual(['A', 'B']);
+  });
+
+  test('shows a readable error when the tab cannot be read', async () => {
+    window.history.replaceState({}, '', '/?tabId=999');
+    fake.tabs.get.mockRejectedValueOnce(new Error('No tab with id: 999'));
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<Popup db={db} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't read this tab");
+    errors.mockRestore();
   });
 
   test('Open the board opens a new tab', async () => {

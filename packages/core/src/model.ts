@@ -50,3 +50,15 @@ export interface Reminder extends RowBase {
 }
 
 export type TableName = 'workspaces' | 'categories' | 'items' | 'reminders';
+
+/** Protocols a saved link may use; anything else (javascript:, data:, chrome:) is refused. */
+export const LINK_PROTOCOLS = ['http:', 'https:', 'file:', 'ftp:'] as const;
+
+/** True when `url` parses and uses one of LINK_PROTOCOLS. */
+export function isLinkUrl(url: string): boolean {
+  try {
+    return (LINK_PROTOCOLS as readonly string[]).includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}

@@ -10,19 +10,21 @@ import { Icon } from '../ui/components/Icon';
 import { useRun } from './Notice';
 import { openAll } from '../chrome/tabs';
 import { CategoryColumn } from './CategoryColumn';
+import { useNewCategoryDrop } from './dnd';
 
 export function Board({ workspace }: { workspace: Workspace }) {
   const db = useDb();
   const run = useRun();
   const categories = useLiveQuery(() => liveCategories(db, workspace.id), [db, workspace.id]) ?? [];
   const [adding, setAdding] = useState(false);
+  const drop = useNewCategoryDrop(workspace.id);
 
   return (
     <div className="atl-board">
       <SortableContext items={categories.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
         {categories.map((c) => <CategoryColumn key={c.id} category={c} onOpenAll={() => void run(openAll(db, c.id))} />)}
       </SortableContext>
-      <div className="atl-newcat">
+      <div ref={drop.setNodeRef} className={drop.isOver ? 'atl-newcat atl-newcat-over' : 'atl-newcat'}>
         {adding ? (
           <InlineNameField
             label="Category name"

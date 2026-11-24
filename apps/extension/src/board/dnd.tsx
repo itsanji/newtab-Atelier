@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type CSSProperties, type PointerEventHandler, type ReactNode } from 'react';
 import {
-  DndContext, DragOverlay, KeyboardSensor, PointerSensor, pointerWithin, closestCorners, useSensor, useSensors,
+  DndContext, DragOverlay, KeyboardSensor, PointerSensor, pointerWithin, closestCorners, useDroppable, useSensor, useSensors,
   type Active, type Announcements, type CollisionDetection, type DragEndEvent, type DragStartEvent, type Over,
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
@@ -9,14 +9,14 @@ import type { Category, Item } from '@atelier/core';
 import { useDb } from '../data/DbContext';
 import type { AtelierDB } from '../data/db';
 import { liveCategories, liveItems } from '../data/queries';
-import { saveTab } from '../chrome/tabs';
-import { moveCategory, moveItem } from '../data/repo';
+import { saveTab, savedLabel } from '../chrome/tabs';
+import { createCategory, moveCategory, moveItem, tx } from '../data/repo';
 import { IconButton } from '../ui/components/IconButton';
 import { useNotify, useRun } from './Notice';
 import { domainOf } from './url';
 
 export type Placement = 'before' | 'after';
-export type DragType = 'item' | 'category' | 'tab' | 'workspace';
+export type DragType = 'item' | 'category' | 'tab' | 'workspace' | 'newcat';
 
 export function computeItemDrop(
   target: { categoryId: string; overItemId: string | null; placement: Placement },
@@ -40,29 +40,50 @@ export function computeCategoryDrop(
 
 export type DropEnd = {
   active: { type: DragType; id: string; tab?: { url?: string; title?: string } };
+  /** For `newcat`, `id` is the workspace the new category goes in. */
   over: { type: DragType; id: string } | null;
   placement: Placement;
 };
 
+type ItemTarget = { categoryId: string; overItemId: string | null } | { notice: string } | null;
+
+/** Where an item or tab dropped on `over` lands; null when `over` can't take it. */
+async function itemTarget(db: AtelierDB, over: { type: DragType; id: string }): Promise<ItemTarget> {
+  if (over.type === 'item') {
+    const row = await db.items.get(over.id);
+    if (!row || row.deletedAt !== null) return null;
+    return { categoryId: row.categoryId, overItemId: over.id };
+  }
+  if (over.type === 'category') return { categoryId: over.id, overItemId: null };
+  if (over.type === 'workspace') {
+    const first = (await liveCategories(db, over.id))[0];
+    if (!first) return { notice: 'Add a category to that workspace first' };
+    return { categoryId: first.id, overItemId: null };
+  }
+  return null;
+}
+
 /** Applies a finished drag to the data. Resolves to a notice to show, or nothing. */
-export async function applyDrop(db: AtelierDB, { active, over, placement }: DropEnd): Promise<string | null> {
+export async function applyDrop(
+  db: AtelierDB, { active, over, placement }: DropEnd, now: Date = new Date(),
+): Promise<string | null> {
   if (!over || active.id === over.id) return null;
 
+  // An item or tab dropped on the New category tile starts a category, first in the workspace.
+  if (over.type === 'newcat' && (active.type === 'item' || (active.type === 'tab' && active.tab?.url))) {
+    await tx(db, async () => {
+      const cat = await createCategory(db, { workspaceId: over.id, name: savedLabel(now) }, { position: 'start' });
+      if (active.type === 'item') await moveItem(db, active.id, { categoryId: cat.id, beforeId: null, afterId: null });
+      else await saveTab(db, active.tab as chrome.tabs.Tab, { categoryId: cat.id });
+    });
+    return null;
+  }
+
   if (active.type === 'item') {
-    let categoryId: string;
-    let overItemId: string | null = null;
-    if (over.type === 'item') {
-      const row = await db.items.get(over.id);
-      if (!row || row.deletedAt !== null) return null;
-      categoryId = row.categoryId;
-      overItemId = over.id;
-    } else if (over.type === 'category') {
-      categoryId = over.id;
-    } else if (over.type === 'workspace') {
-      const first = (await liveCategories(db, over.id))[0];
-      if (!first) return 'Add a category to that workspace first';
-      categoryId = first.id;
-    } else return null;
+    const t = await itemTarget(db, over);
+    if (!t) return null;
+    if ('notice' in t) return t.notice;
+    const { categoryId, overItemId } = t;
     const all = await liveItems(db, categoryId);
     const siblings = all.filter((s) => s.id !== active.id);
     const target = computeItemDrop({ categoryId, overItemId, placement }, siblings);
@@ -75,26 +96,15 @@ export async function applyDrop(db: AtelierDB, { active, over, placement }: Drop
 
   if (active.type === 'tab') {
     if (!active.tab?.url) return null;
-    let categoryId: string;
-    let overItemId: string | null = null;
-    if (over.type === 'item') {
-      const row = await db.items.get(over.id);
-      if (!row || row.deletedAt !== null) return null;
-      categoryId = row.categoryId;
-      overItemId = over.id;
-    } else if (over.type === 'category') {
-      categoryId = over.id;
-    } else if (over.type === 'workspace') {
-      const first = (await liveCategories(db, over.id))[0];
-      if (!first) return 'Add a category to that workspace first';
-      categoryId = first.id;
-    } else return null;
-    const item = await saveTab(db, active.tab as chrome.tabs.Tab, { categoryId });
-    if (overItemId !== null) {
-      const siblings = (await liveItems(db, categoryId)).filter((s) => s.id !== item.id);
-      const target = computeItemDrop({ categoryId, overItemId, placement }, siblings);
-      await moveItem(db, item.id, target);
-    }
+    const t = await itemTarget(db, over);
+    if (!t) return null;
+    if ('notice' in t) return t.notice;
+    const { categoryId, overItemId } = t;
+    // Saved straight at its place: one write, no separate move.
+    const target = overItemId === null
+      ? { categoryId }
+      : computeItemDrop({ categoryId, overItemId, placement }, await liveItems(db, categoryId));
+    await saveTab(db, active.tab as chrome.tabs.Tab, target);
     return null;
   }
 
@@ -111,9 +121,15 @@ export async function applyDrop(db: AtelierDB, { active, over, placement }: Drop
   return null;
 }
 
-type DragData = { type?: DragType; title?: string; categoryName?: string; tab?: { url?: string; title?: string } };
+type DragData = {
+  type?: DragType; title?: string; categoryName?: string; workspaceId?: string; tab?: { url?: string; title?: string };
+};
 
-const collisions: CollisionDetection = (args) => {
+/**
+ * Columns reorder by closest corners. Everything else drops only where the pointer is: a sidebar
+ * workspace first, then an item, then a column or the New category tile. Over nothing, no target.
+ */
+export const collisions: CollisionDetection = (args) => {
   const type = (args.active.data.current as DragData | undefined)?.type;
   if (type === 'category') {
     return closestCorners({
@@ -122,10 +138,9 @@ const collisions: CollisionDetection = (args) => {
     });
   }
   const hits = pointerWithin(args);
-  const found = hits.length ? hits : closestCorners(args);
   const kindOf = (id: unknown) => (args.droppableContainers.find((c) => c.id === id)?.data.current as DragData | undefined)?.type;
   const rank = (id: unknown) => (kindOf(id) === 'workspace' ? 0 : kindOf(id) === 'item' ? 1 : 2);
-  return [...found].sort((a, b) => rank(a.id) - rank(b.id));
+  return [...hits].sort((a, b) => rank(a.id) - rank(b.id));
 };
 
 function placementOf(active: Active, over: Over, axis: 'x' | 'y'): Placement {
@@ -168,7 +183,7 @@ export function BoardDnd({ children }: { children: ReactNode }) {
     if (!e.over || !a?.type || !o?.type) return;
     const drop: DropEnd = {
       active: { type: a.type, id: String(e.active.id), tab: a.tab },
-      over: { type: o.type, id: String(e.over.id) },
+      over: { type: o.type, id: o.type === 'newcat' ? (o.workspaceId ?? '') : String(e.over.id) },
       placement: placementOf(e.active, e.over, a.type === 'category' ? 'x' : 'y'),
     };
     void run(applyDrop(db, drop).then((msg) => { if (msg) notify(msg); }));
@@ -187,6 +202,11 @@ export function BoardDnd({ children }: { children: ReactNode }) {
       <DragOverlay>{dragging !== null && <div className="atl-drag-overlay">{dragging}</div>}</DragOverlay>
     </DndContext>
   );
+}
+
+/** Makes the New category tile a drop target for items and tabs. */
+export function useNewCategoryDrop(workspaceId: string) {
+  return useDroppable({ id: `newcat:${workspaceId}`, data: { type: 'newcat', workspaceId, title: 'a new category' } });
 }
 
 /** Sortable wiring for an item row: `rowProps` go on the row, `handle` renders the grip. */

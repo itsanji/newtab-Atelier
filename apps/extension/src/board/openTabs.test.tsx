@@ -51,6 +51,18 @@ describe('open tabs panel', () => {
     expect(await fake.tabs.query({})).toHaveLength(0);
   });
 
+  test('Save all never reports tabs it did not save', async () => {
+    const user = userEvent.setup();
+    await fake.tabs.create({ url: 'https://a.com', title: 'Alpha' });
+    render(<App db={db} />);
+    const button = await screen.findByRole('button', { name: 'Save all 1 and close' });
+    // The tab went away between listing and saving.
+    fake.tabs.query.mockResolvedValueOnce([]);
+    await user.click(button);
+    await waitFor(() => expect(document.querySelector('.atl-notice')).toHaveTextContent('Nothing to save'));
+    expect(document.querySelector('.atl-notice')).not.toHaveTextContent(/Saved/);
+  });
+
   test('Open all opens the category links', async () => {
     const user = userEvent.setup();
     await ensureSeed(db);

@@ -8,7 +8,7 @@ import { useTheme } from '../data/settings';
 import { ensureSeed } from '../data/seed';
 import { LAST_CATEGORY_KEY } from '../data/target';
 import { faviconUrl } from '../chrome/favicon';
-import { isSavableTab, listWindowTabs, saveAllAndClose } from '../chrome/tabs';
+import { isSavableTab, listWindowTabs, saveAll as saveAllTabs } from '../chrome/tabs';
 import { NoticeProvider, useRun } from '../board/Notice';
 import { Button } from '../ui/components/Button';
 import { Dabs } from '../ui/components/Dabs';
@@ -74,7 +74,7 @@ function PopupBody({ initial }: { initial: Loaded }) {
     const ok = await run((async () => {
       await createItem(db, {
         categoryId: selected.id, kind: 'link', title: tab.title || tab.url || '', url: tab.url,
-        faviconUrl: faviconUrl(tab.url ?? ''), note: note.trim() || null,
+        faviconUrl: null, note: note.trim() || null,
       });
       await setMeta(db, LAST_CATEGORY_KEY, selected.id);
       if (closeAfterSave && tab.id !== undefined) await chrome.tabs.remove(tab.id);
@@ -82,15 +82,18 @@ function PopupBody({ initial }: { initial: Loaded }) {
     setBusy(false);
     if (!ok) return;
     if (closeAfterSave) window.close();
-    else setSaved(selected.name);
+    else setSaved(`Saved to ${selected.name}`);
   };
 
   const saveAll = async () => {
     if (busy) return;
     setBusy(true);
-    const ok = await run(saveAllAndClose(db, workspace.id, tab?.windowId));
+    let count = 0;
+    const ok = await run(saveAllTabs(db, workspace.id, { windowId: tab?.windowId, close: closeAfterSave }).then((r) => { count = r.saved; }));
     setBusy(false);
-    if (ok) window.close();
+    if (!ok) return;
+    if (closeAfterSave) window.close();
+    else setSaved(`Saved ${count} ${count === 1 ? 'tab' : 'tabs'} to ${workspace.name}`);
   };
 
   const addCategory = async () => {
@@ -166,7 +169,7 @@ function PopupBody({ initial }: { initial: Loaded }) {
       <div className="atl-popup-actions">
         {!savable && <p className="atl-popup-hint">This page can't be saved</p>}
         {saved && (
-          <p className="atl-popup-status" role="status"><Icon name="check" size={18} />Saved to {saved}</p>
+          <p className="atl-popup-status" role="status"><Icon name="check" size={18} />{saved}</p>
         )}
         <Button variant="primary" disabled={!savable || !selected || busy} onClick={() => void save()}>Save tab</Button>
         {initial.windowTabs > 0 && (
@@ -188,11 +191,23 @@ function PopupBody({ initial }: { initial: Loaded }) {
 export function Popup({ db }: { db?: AtelierDB }) {
   const [resolved] = useState(() => db ?? (defaultDb ??= openDb()));
   const [initial, setInitial] = useState<Loaded | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let live = true;
-    void load(resolved).then((l) => live && setInitial(l));
+    load(resolved).then(
+      (l) => { if (live) setInitial(l); },
+      (e: unknown) => { console.error(e); if (live) setFailed(true); },
+    );
     return () => { live = false; };
   }, [resolved]);
+  if (failed) {
+    return (
+      <main className="atl-popup">
+        <div className="atl-popup-head"><span className="atl-popup-brand">Atelier</span></div>
+        <p className="atl-popup-hint" role="alert">Couldn't read this tab</p>
+      </main>
+    );
+  }
   if (!initial) return null;
   return (
     <DbProvider db={resolved}>

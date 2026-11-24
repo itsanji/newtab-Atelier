@@ -54,10 +54,9 @@ export function OpenTabsPanel({ workspaceId }: { workspaceId: string }) {
   }, []);
 
   const saveAll = async () => {
-    const before = tabs.length;
     let saved = 0;
     if (await run(saveAllAndClose(db, workspaceId).then((r) => { saved = r.saved; }))) {
-      notify(`Saved ${saved || before} ${(saved || before) === 1 ? 'tab' : 'tabs'}`);
+      notify(saved === 0 ? 'Nothing to save' : `Saved ${saved} ${saved === 1 ? 'tab' : 'tabs'}`);
     }
   };
 
