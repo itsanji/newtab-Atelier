@@ -7,6 +7,7 @@ import { ensureSeed } from '../data/seed';
 import { NoticeProvider, useRun } from '../board/Notice';
 import { Board } from '../board/Board';
 import { BoardHeader } from '../board/BoardHeader';
+import { BoardDnd } from '../board/dnd';
 import { Sidebar } from '../board/Sidebar';
 
 const SELECTED_KEY = 'selectedWorkspaceId';
@@ -21,6 +22,7 @@ function Shell({ db }: { db: AtelierDB }) {
   const selected = workspaces.find((w) => w.id === stored) ?? workspaces[0];
   if (!selected) return null;
   return (
+    <BoardDnd>
     <div className="atl-shell">
       <Sidebar workspaces={workspaces} selectedId={selected.id} onSelect={(id) => void run(setMeta(db, SELECTED_KEY, id))} />
       <main className="atl-main">
@@ -28,6 +30,7 @@ function Shell({ db }: { db: AtelierDB }) {
         <Board key={selected.id} workspace={selected} />
       </main>
     </div>
+    </BoardDnd>
   );
 }
 

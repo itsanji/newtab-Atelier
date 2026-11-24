@@ -72,3 +72,9 @@ a { color: var(--lily); }
 .atl-todo { padding: var(--space-1) var(--space-2); }
 .atl-todo-label { flex: 1; min-width: 0; display: flex; gap: var(--space-3); align-items: flex-start; font-size: 14px; line-height: 24px; cursor: pointer; }
 .atl-todo-done { color: var(--ink-muted); text-decoration: line-through; }
+
+.atl-grip { flex: none; cursor: grab; opacity: 0; touch-action: none; }
+.atl-item:hover .atl-grip, .atl-item:focus-within .atl-grip, .atl-column-head .atl-grip { opacity: 1; }
+.atl-grip:focus-visible { opacity: 1; }
+.atl-ws-over { background: var(--lily-soft); border-radius: var(--radius-md); }
+.atl-drag-overlay { padding: var(--space-2) var(--space-3); background: var(--canvas); border: 1.5px solid var(--line-strong); border-radius: var(--radius-md); box-shadow: var(--shadow-lift); font-size: 14px; line-height: 20px; }

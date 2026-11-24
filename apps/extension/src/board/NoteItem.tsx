@@ -11,6 +11,7 @@ import { Menu } from '../ui/components/Menu';
 import { Icon } from '../ui/components/Icon';
 import { useRun } from './Notice';
 import { removeAndRefocus } from './removeItem';
+import { useSortableItem } from './dnd';
 
 type Node = { type?: string; text?: string; content?: Node[] };
 
@@ -38,7 +39,8 @@ const DEBOUNCE_MS = 400;
 export function NoteItem({ item, autoFocus = false, onAutoFocused }: { item: Item; autoFocus?: boolean; onAutoFocused?(): void }) {
   const db = useDb();
   const run = useRun();
-  const row = useRef<HTMLDivElement>(null);
+  const row = useRef<HTMLDivElement | null>(null);
+  const dnd = useSortableItem(item, false);
   const pending = useRef<Node | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const runRef = useRef(run);
@@ -107,7 +109,8 @@ export function NoteItem({ item, autoFocus = false, onAutoFocused }: { item: Ite
   };
 
   return (
-    <div className="atl-item atl-note" ref={row}>
+    <div className="atl-item atl-note" ref={(el) => { row.current = el; dnd.setNodeRef(el); }} style={dnd.style}>
+      {dnd.handle}
       <div className="atl-note-well"><EditorContent editor={editor} /></div>
       <div className="atl-item-menu">
         <Menu

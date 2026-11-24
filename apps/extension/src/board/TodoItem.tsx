@@ -7,17 +7,20 @@ import { Icon } from '../ui/components/Icon';
 import { InlineNameField } from './InlineNameField';
 import { useRun } from './Notice';
 import { removeAndRefocus } from './removeItem';
+import { useSortableItem } from './dnd';
 
 export function TodoItem({ item }: { item: Item }) {
   const db = useDb();
   const run = useRun();
-  const row = useRef<HTMLDivElement>(null);
+  const row = useRef<HTMLDivElement | null>(null);
+  const dnd = useSortableItem(item, false);
   const [editing, setEditing] = useState(false);
 
   const remove = () => removeAndRefocus(row.current, () => run(deleteItem(db, item.id)));
 
   return (
-    <div className="atl-item atl-todo" ref={row}>
+    <div className="atl-item atl-todo" ref={(el) => { row.current = el; dnd.setNodeRef(el); }} style={dnd.style}>
+      {dnd.handle}
       {editing ? (
         <InlineNameField
           label="To-do text"

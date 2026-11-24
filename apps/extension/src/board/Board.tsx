@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Workspace } from '@atelier/core';
 import { useDb } from '../data/DbContext';
@@ -17,7 +18,9 @@ export function Board({ workspace }: { workspace: Workspace }) {
 
   return (
     <div className="atl-board">
-      {categories.map((c) => <CategoryColumn key={c.id} category={c} />)}
+      <SortableContext items={categories.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
+        {categories.map((c) => <CategoryColumn key={c.id} category={c} />)}
+      </SortableContext>
       <div className="atl-newcat">
         {adding ? (
           <InlineNameField

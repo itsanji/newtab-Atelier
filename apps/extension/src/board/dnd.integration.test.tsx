@@ -1,0 +1,86 @@
+import { beforeEach, describe, expect, test } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
+import { App } from '../newtab/App';
+import { openDb, type AtelierDB } from '../data/db';
+import { createCategory, createItem, createWorkspace } from '../data/repo';
+import { liveCategories, liveItems, liveWorkspaces } from '../data/queries';
+import { ensureSeed } from '../data/seed';
+import { applyDrop } from './dnd';
+import { installChromeFake } from '../../test/chromeFake';
+
+let db: AtelierDB;
+beforeEach(() => {
+  installChromeFake();
+  db = openDb('test-' + crypto.randomUUID());
+});
+
+async function setup() {
+  await ensureSeed(db);
+  const ws = (await liveWorkspaces(db))[0]!;
+  const a = await createCategory(db, { workspaceId: ws.id, name: 'Reading list' });
+  const b = await createCategory(db, { workspaceId: ws.id, name: 'Later' });
+  const mk = (categoryId: string, title: string) => createItem(db, { categoryId, kind: 'link', title, url: `https://${title}.com` });
+  return { ws, a, b, mk };
+}
+const titles = async (id: string) => (await liveItems(db, id)).map((i) => i.title);
+
+describe('applyDrop', () => {
+  test('moves an item between categories and keeps order', async () => {
+    const { a, b, mk } = await setup();
+    const x = await mk(a.id, 'x');
+    await mk(a.id, 'y');
+    const p = await mk(b.id, 'p');
+    await mk(b.id, 'q');
+    expect(await applyDrop(db, { active: { type: 'item', id: x.id }, over: { type: 'item', id: p.id }, placement: 'after' })).toBeNull();
+    expect(await titles(a.id)).toEqual(['y']);
+    expect(await titles(b.id)).toEqual(['p', 'x', 'q']);
+  });
+
+  test('dropping on a column appends; reorders within a column', async () => {
+    const { a, b, mk } = await setup();
+    const x = await mk(a.id, 'x');
+    const y = await mk(a.id, 'y');
+    await applyDrop(db, { active: { type: 'item', id: x.id }, over: { type: 'category', id: b.id }, placement: 'after' });
+    expect(await titles(b.id)).toEqual(['x']);
+    await applyDrop(db, { active: { type: 'item', id: x.id }, over: { type: 'item', id: y.id }, placement: 'before' });
+    expect(await titles(a.id)).toEqual(['x', 'y']);
+  });
+
+  test('reorders categories', async () => {
+    const { ws, a, b } = await setup();
+    const before = (await liveCategories(db, ws.id)).map((c) => c.id);
+    expect(before.slice(-2)).toEqual([a.id, b.id]);
+    await applyDrop(db, { active: { type: 'category', id: b.id }, over: { type: 'category', id: a.id }, placement: 'before' });
+    expect((await liveCategories(db, ws.id)).map((c) => c.id).slice(-2)).toEqual([b.id, a.id]);
+  });
+
+  test('drop on a workspace appends to its first category, or notifies when empty', async () => {
+    const { a, mk } = await setup();
+    const x = await mk(a.id, 'x');
+    const other = await createWorkspace(db, { name: 'Other' });
+    expect(await applyDrop(db, { active: { type: 'item', id: x.id }, over: { type: 'workspace', id: other.id }, placement: 'after' }))
+      .toBe('Add a category to that workspace first');
+    expect(await titles(a.id)).toEqual(['x']);
+    const c = await createCategory(db, { workspaceId: other.id, name: 'First' });
+    await applyDrop(db, { active: { type: 'item', id: x.id }, over: { type: 'workspace', id: other.id }, placement: 'after' });
+    expect(await titles(c.id)).toEqual(['x']);
+  });
+
+  test('ignores unsupported and missing targets', async () => {
+    const { ws, a, mk } = await setup();
+    const x = await mk(a.id, 'x');
+    expect(await applyDrop(db, { active: { type: 'item', id: x.id }, over: null, placement: 'after' })).toBeNull();
+    expect(await applyDrop(db, { active: { type: 'category', id: a.id }, over: { type: 'workspace', id: ws.id }, placement: 'after' })).toBeNull();
+    expect(await titles(a.id)).toEqual(['x']);
+  });
+});
+
+describe('drag handles', () => {
+  test('rows and columns expose keyboard drag handles', async () => {
+    await setup().then(({ a, mk }) => mk(a.id, 'x'));
+    render(<App db={db} />);
+    const col = await screen.findByRole('region', { name: 'Reading list' });
+    expect(await within(col).findByRole('button', { name: 'Drag to move' })).toBeInTheDocument();
+    expect(within(col).getByRole('button', { name: 'Drag to reorder category' })).toBeInTheDocument();
+  });
+});

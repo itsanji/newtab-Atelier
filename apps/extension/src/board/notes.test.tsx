@@ -111,7 +111,7 @@ describe('notes', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
     await waitFor(async () => expect((await items())[0].deletedAt).not.toBeNull());
     await new Promise((r) => setTimeout(r, 600));
-    expect(screen.getByRole('status', { hidden: true })).toBeEmptyDOMElement();
+    expect(document.querySelector('.atl-notice')).toBeEmptyDOMElement();
     expect((await items())[0].deletedAt).not.toBeNull();
   });
 

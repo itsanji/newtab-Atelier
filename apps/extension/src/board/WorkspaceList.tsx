@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useDroppable } from '@dnd-kit/core';
 import type { Workspace } from '@atelier/core';
 import { useDb } from '../data/DbContext';
 import { createWorkspace, deleteWorkspace, updateWorkspace } from '../data/repo';
@@ -20,10 +21,11 @@ function WorkspaceRow({
   const [name, setName] = useState(ws.name);
   const [nameError, setNameError] = useState<string>();
   const run = useRun();
+  const drop = useDroppable({ id: ws.id, data: { type: 'workspace', title: ws.name } });
   const [emoji, setEmoji] = useState(ws.emoji ?? '');
 
   return (
-    <div className={['atl-ws', selected && 'atl-ws-active'].filter(Boolean).join(' ')}>
+    <div ref={drop.setNodeRef} className={['atl-ws', selected && 'atl-ws-active', drop.isOver && 'atl-ws-over'].filter(Boolean).join(' ')}>
       <button type="button" className="atl-ws-btn" aria-current={selected ? 'page' : undefined} onClick={onSelect}>
         <span>{ws.emoji ? `${ws.emoji} ` : ''}{ws.name}</span>
         <span className="atl-ws-count">{count}</span>

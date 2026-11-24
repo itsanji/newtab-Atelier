@@ -8,6 +8,7 @@ import { Icon } from '../ui/components/Icon';
 import { LinkForm } from './LinkForm';
 import { useRun } from './Notice';
 import { removeAndRefocus } from './removeItem';
+import { useSortableItem } from './dnd';
 import { Dialog } from '../ui/components/Dialog';
 import { domainOf, normalizeUrl } from './url';
 
@@ -22,18 +23,25 @@ function hash(s: string): number {
 export function ItemRow({ item }: { item: Item }) {
   const db = useDb();
   const run = useRun();
-  const row = useRef<HTMLDivElement>(null);
+  const row = useRef<HTMLDivElement | null>(null);
   const [broken, setBroken] = useState(false);
   const [editing, setEditing] = useState(false);
   const url = item.url ?? '';
   const domain = domainOf(url);
+  const dnd = useSortableItem(item, true);
   const tone = TONES[hash(item.id) % 4];
 
   const remove = () => removeAndRefocus(row.current, () => run(deleteItem(db, item.id)));
 
   return (
-    <div className="atl-item" ref={row}>
-      <a href={url} className="atl-link atl-item-link">
+    <div
+      className="atl-item"
+      ref={(el) => { row.current = el; dnd.setNodeRef(el); }}
+      style={dnd.style}
+      {...dnd.rowProps}
+    >
+      {dnd.handle}
+      <a href={url} className="atl-link atl-item-link" draggable={false}>
         <span className={`atl-fav atl-tone-${tone}`}>
           {broken ? (
             (item.title || domain).charAt(0).toUpperCase()
