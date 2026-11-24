@@ -25,7 +25,7 @@ afterEach(async () => {
 describe('signed-in first run', () => {
   test('a fresh account board waits for the first pull, then gets the starter workspace', async () => {
     await setAccount(account);
-    render(<App />);
+    await act(async () => { render(<App />); });
     expect(await screen.findByText('Getting your board from the server…')).toBeInTheDocument();
     const db = await getActiveDb();
     expect(await db.workspaces.count()).toBe(0);
@@ -37,7 +37,7 @@ describe('signed-in first run', () => {
 
   test('a pulled workspace is shown without adding the starter one', async () => {
     await setAccount(account);
-    render(<App />);
+    await act(async () => { render(<App />); });
     await screen.findByText('Getting your board from the server…');
     const db = await getActiveDb();
     const t = '2026-11-24T00:00:00.000Z';

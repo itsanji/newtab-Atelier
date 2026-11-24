@@ -121,6 +121,28 @@ describe('finishSignIn', () => {
     db.close();
   });
 
+  test('a re-run merge does not clobber newer account rows', async () => {
+    const { cats } = await localWithContent();
+    const local = openDb('local');
+    const snapshot = { categories: await local.categories.toArray(), items: await local.items.toArray(), workspaces: await local.workspaces.toArray() };
+    local.close();
+    const account = await finishSignIn(api, auth('u1'));
+    const db = openDb(account.partition);
+    // A pull brought a newer version of a category; the outbox has been flushed.
+    await db.categories.update(cats[2]!.id, { name: 'Renamed elsewhere', updatedAt: '2099-01-01T00:00:00.000Z' });
+    await db.outbox.clear();
+    // The local partition came back (its delete had failed) and sign-in runs again.
+    const again = openDb('local');
+    await again.workspaces.bulkPut(snapshot.workspaces);
+    await again.categories.bulkPut(snapshot.categories);
+    await again.items.bulkPut(snapshot.items);
+    again.close();
+    await finishSignIn(api, auth('u1'));
+    expect((await db.categories.get(cats[2]!.id))?.name).toBe('Renamed elsewhere');
+    expect(await db.outbox.count()).toBe(0);
+    db.close();
+  });
+
   test('untouched seed is not merged', async () => {
     const local = openDb('local');
     await ensureSeed(local);
@@ -208,6 +230,49 @@ describe('signOut', () => {
     expect(back).not.toBe(cached);
     await expect(cached.items.count()).rejects.toThrow();
     expect(await back.items.count()).toBe(0);
+  });
+
+  test('an edit landing during logOut is not deleted silently', async () => {
+    await localWithContent();
+    const account = await finishSignIn(api, auth('u1'));
+    const fake = okApi();
+    let saved: string | undefined;
+    fake.logOut.mockImplementation(async () => {
+      // Another page saves while the logout request is in flight: it goes to the active partition.
+      const db = await getActiveDb();
+      const ws = await createWorkspace(db, { name: 'Late' });
+      const cat = await createCategory(db, { workspaceId: ws.id, name: 'C' });
+      saved = (await createItem(db, { categoryId: cat.id, kind: 'note', title: 'late edit' } as never)).id;
+      return undefined as never;
+    });
+    expect(await signOut(account, fake as never)).toBe('signed-out');
+    await vi.waitFor(() => expect(saved).toBeDefined());
+    const local = openDb('local');
+    expect(await local.items.get(saved!)).toMatchObject({ title: 'late edit' });
+    local.close();
+  });
+
+  test('an edit that slips in after the outbox check keeps the account and its data', async () => {
+    await localWithContent();
+    const account = await finishSignIn(api, auth('u1'));
+    const remove = chromeFake.storage.local.remove;
+    const original = remove.getMockImplementation()!;
+    let lateId = '';
+    remove.mockImplementationOnce(async (keys: string | string[]) => {
+      // A tab that hasn't switched yet writes to the account partition just as the account is cleared.
+      const db = openDb(account.partition);
+      const [cat] = await db.categories.toArray();
+      setCurrentUserId('u1');
+      lateId = (await createItem(db, { categoryId: cat!.id, kind: 'note', title: 'late' } as never)).id;
+      db.close();
+      await original(keys);
+    });
+    expect(await signOut(account, okApi() as never)).toBe('unsynced');
+    expect(await getAccount()).toEqual(account);
+    const db = openDb(account.partition);
+    expect(await db.items.get(lateId)).toMatchObject({ title: 'late' });
+    expect(await db.outbox.count()).toBe(1);
+    db.close();
   });
 
   test('sign-out anyway deletes even with unsynced edits', async () => {

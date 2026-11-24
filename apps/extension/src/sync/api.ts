@@ -64,6 +64,8 @@ export interface ServerUser {
 export interface ServerConfig {
   name: string;
   auth: { password: boolean; magicLink: boolean; google: boolean };
+  /** False when the server takes no new sign-ups. Missing on older servers (treated as open). */
+  signup?: boolean;
 }
 export interface AuthResult {
   token: string;

@@ -82,6 +82,13 @@ describe('AccountDialog', () => {
     expect(screen.queryByRole('button', { name: 'Continue with Google' })).toBeNull();
   });
 
+  test('closed sign-ups hide Create account', async () => {
+    routes['GET /api/config'] = () => ({ json: { name: 'Atelier', signup: false, auth: { password: true, magicLink: false, google: false } } });
+    await connect();
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create account' })).toBeNull();
+  });
+
   test("an unreachable server shows Can't reach that server", async () => {
     await connect('b.example');
     expect(await screen.findByText("Can't reach that server")).toBeInTheDocument();
@@ -110,7 +117,7 @@ describe('AccountDialog', () => {
     await waitFor(async () => expect((await getAccount())?.partition).toBe(PARTITION));
     expect(await getAccount()).toMatchObject({ serverUrl: SERVER, userId: 'u1', token: 't1', email: 'u1@x.io' });
     expect(await screen.findByRole('button', { name: 'Ada' })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   test('create account adds a name field and signs up', async () => {
@@ -126,6 +133,7 @@ describe('AccountDialog', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw-long-enough' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
     await waitFor(async () => expect((await getAccount())?.userId).toBe('u1'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(signup).toHaveBeenCalledWith({ email: 'u1@x.io', password: 'pw-long-enough', displayName: 'Ada' });
   });
 
@@ -145,6 +153,7 @@ describe('AccountDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Email me a link' }));
     expect(await screen.findByRole('heading', { name: 'Check your email' })).toBeInTheDocument();
     await waitFor(async () => expect((await getAccount())?.userId).toBe('u1'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(polls).toBe(3);
   });
 
@@ -179,6 +188,7 @@ describe('AccountDialog', () => {
     await screen.findByRole('heading', { name: 'Sign in' });
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
     await waitFor(async () => expect((await getAccount())?.userId).toBe('u1'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   test('google with a mismatched state does not sign in', async () => {
@@ -215,6 +225,15 @@ describe('signed in', () => {
     // Opened to sign in again: straight to the server's sign-in form, email filled in.
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.getByLabelText('Email')).toHaveValue('u1@x.io');
+  });
+
+  test('the open-account event switches an open dialog to signing in again', async () => {
+    await setAccount(account);
+    renderEntry();
+    fireEvent.click(await screen.findByRole('button', { name: 'Ada' }));
+    expect(await screen.findByRole('heading', { name: 'Account' })).toBeInTheDocument();
+    act(() => void window.dispatchEvent(new CustomEvent(OPEN_ACCOUNT_EVENT)));
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
   });
 
   test('account view lists server and email', async () => {

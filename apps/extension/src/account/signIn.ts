@@ -78,8 +78,8 @@ async function readLocal(local: AtelierDB): Promise<LocalRows> {
 /**
  * Copy local rows into the account partition: all categories move (ids kept) into one
  * "From this device" workspace; items and reminders keep their ids, reminders now belong to the user.
- * Everything is queued for upload. Re-running reuses the same workspace and overwrites by id, so
- * nothing duplicates.
+ * Everything is queued for upload. Re-running reuses the same workspace and skips rows the account
+ * already has at the same or a newer version, so nothing duplicates and newer state isn't clobbered.
  */
 async function mergeInto(target: AtelierDB, rows: LocalRows, userId: string): Promise<void> {
   const t = clock.now();
@@ -104,17 +104,24 @@ async function mergeInto(target: AtelierDB, rows: LocalRows, userId: string): Pr
     let last = sortByKey(
       (await target.categories.where('workspaceId').equals(ws.id).filter(live).toArray()).filter((c) => !movedIds.has(c.id)),
     ).at(-1)?.sortKey ?? null;
+    const newer = async (table: 'categories' | 'items' | 'reminders', row: { id: string; updatedAt: string }) => {
+      const cur = (await target.table(table).get(row.id)) as { updatedAt: string } | undefined;
+      return !!cur && cur.updatedAt >= row.updatedAt;
+    };
     for (const c of rows.categories) {
+      if (await newer('categories', c)) continue;
       last = appendKey(last);
       const moved: Category = { ...c, workspaceId: ws.id, sortKey: last, updatedAt: t, updatedBy: userId };
       await target.categories.put(moved);
       await enqueue(target, 'categories', moved, t);
     }
     for (const i of rows.items) {
+      if (await newer('items', i)) continue;
       await target.items.put(i);
       await enqueue(target, 'items', i, t);
     }
     for (const r of rows.reminders) {
+      if (await newer('reminders', r)) continue;
       const mine: Reminder = { ...r, userId, updatedBy: userId };
       await target.reminders.put(mine);
       await enqueue(target, 'reminders', mine, t);
@@ -139,27 +146,32 @@ export async function finishSignIn(api: Pick<ApiClient, 'serverUrl'>, result: Au
   const current = await getAccount();
   if (current && current.partition !== account.partition) throw new AccountSwitchError();
 
-  const local = openDb(LOCAL_PARTITION);
-  try {
-    if (await hasUserContent(local)) {
-      const rows = await readLocal(local);
-      const target = openDb(account.partition);
-      try {
-        await mergeInto(target, rows, account.userId);
-      } finally {
-        target.close();
-      }
-    }
-  } finally {
-    local.close();
-  }
+  await mergeLocal(account);
   await setAccount(account);
+  // Pages and the worker now write to the account; catch anything that reached `local` meanwhile.
+  await mergeLocal(account);
   // Only after the copy has committed: the local partition is emptied.
   forgetDb(LOCAL_PARTITION);
   await deleteDb(LOCAL_PARTITION);
   tellWorker('reminders-changed');
   tellWorker('sync-now');
   return account;
+}
+
+async function mergeLocal(account: Account): Promise<void> {
+  const local = openDb(LOCAL_PARTITION);
+  try {
+    if (!(await hasUserContent(local))) return;
+    const rows = await readLocal(local);
+    const target = openDb(account.partition);
+    try {
+      await mergeInto(target, rows, account.userId);
+    } finally {
+      target.close();
+    }
+  } finally {
+    local.close();
+  }
 }
 
 /** Best effort: without a listening worker the next alarm catches up. */
@@ -173,8 +185,10 @@ function tellWorker(type: 'sync-now' | 'reminders-changed'): void {
 
 /**
  * Sign out: flush the outbox first; with edits still unsynced, returns 'unsynced' and changes nothing
- * (unless `force`). Otherwise ends the session (failures ignored), forgets the account, deletes its
- * partition and leaves a freshly seeded local board.
+ * (unless `force`). Otherwise forgets the account (pages and the worker switch away), checks once more
+ * that no edit slipped in meanwhile (if one did, the account is restored and 'unsynced' returned),
+ * deletes its partition, leaves a freshly seeded local board, and ends the server session in the
+ * background (failures ignored).
  */
 export async function signOut(
   account: Account,
@@ -190,13 +204,21 @@ export async function signOut(
       db.close();
     }
   }
-  try {
-    await api.logOut();
-  } catch {
-    /* the session dies with the partition anyway */
-  }
   await clearAccount();
   forgetDb(account.partition);
+  if (!opts.force) {
+    const db = openDb(account.partition);
+    let pending: number;
+    try {
+      pending = await db.outbox.count();
+    } finally {
+      db.close();
+    }
+    if (pending > 0) {
+      await setAccount(account);
+      return 'unsynced';
+    }
+  }
   await deleteDb(account.partition);
   const local = openDb(LOCAL_PARTITION);
   try {
@@ -205,6 +227,10 @@ export async function signOut(
     local.close();
   }
   tellWorker('reminders-changed');
+  // Last, and not awaited: it can take seconds and only needs the token.
+  void Promise.resolve()
+    .then(() => api.logOut())
+    .catch(() => undefined);
   return 'signed-out';
 }
 

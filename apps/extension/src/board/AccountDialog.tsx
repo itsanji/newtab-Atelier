@@ -37,7 +37,8 @@ export function AccountEntry() {
         <Icon name="user" size={18} />
         <span className="atl-account-label">{account ? account.displayName || account.email : 'Connect a server'}</span>
       </button>
-      {open && <AccountDialog reauth={open === 'reauth'} onClose={() => setOpen(null)} />}
+      {/* Keyed, so the open-account event restarts an already open dialog in sign-in-again mode. */}
+      {open && <AccountDialog key={open} reauth={open === 'reauth'} onClose={() => setOpen(null)} />}
     </>
   );
 }
@@ -248,9 +249,11 @@ export function AccountDialog({ reauth = false, onClose }: { reauth?: boolean; o
           {error && <p className="atl-account-error" role="alert">{error}</p>}
           <div className="atl-form-actions">
             <Button variant="primary" type="submit" disabled={busy}>{signup ? 'Create account' : 'Sign in'}</Button>
-            <Button variant="ghost" disabled={busy} onClick={() => { setError(undefined); setStep({ ...step, mode: signup ? 'signin' : 'signup' }); }}>
-              {signup ? 'I have an account' : 'Create account'}
-            </Button>
+            {config.signup !== false && (
+              <Button variant="ghost" disabled={busy} onClick={() => { setError(undefined); setStep({ ...step, mode: signup ? 'signin' : 'signup' }); }}>
+                {signup ? 'I have an account' : 'Create account'}
+              </Button>
+            )}
           </div>
         </form>
         {(config.auth.magicLink || config.auth.google) && (
