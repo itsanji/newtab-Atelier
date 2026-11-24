@@ -11,6 +11,7 @@ import { Menu } from '../ui/components/Menu';
 import { EmojiPicker } from './EmojiPicker';
 import { useRun } from './Notice';
 import { InlineNameField } from './InlineNameField';
+import { useRole } from './useRole';
 import { useSavedCount } from './useSavedCount';
 
 function WorkspaceRow({
@@ -22,7 +23,8 @@ function WorkspaceRow({
   const [name, setName] = useState(ws.name);
   const [nameError, setNameError] = useState<string>();
   const run = useRun();
-  const drop = useDroppable({ id: ws.id, data: { type: 'workspace', title: ws.name } });
+  const role = useRole(ws.id);
+  const drop = useDroppable({ id: ws.id, disabled: role === 'viewer', data: { type: 'workspace', title: ws.name } });
   const [emoji, setEmoji] = useState(ws.emoji ?? '');
 
   return (
@@ -31,15 +33,20 @@ function WorkspaceRow({
         <span>{ws.emoji && <span aria-hidden="true">{ws.emoji} </span>}{ws.name}</span>
         <span className="atl-ws-count">{count}</span>
       </button>
-      <Menu
-        trigger={<Icon name="more" size={18} />}
-        triggerLabel="Workspace options"
-        triggerClassName="atl-icon"
-        items={[
-          { label: 'Edit', onSelect: () => { setName(ws.name); setEmoji(ws.emoji ?? ''); setNameError(undefined); setDialog('edit'); } },
-          { label: 'Delete', danger: true, disabled: only, hint: only ? 'Keep at least one workspace' : undefined, onSelect: () => setDialog('delete') },
-        ]}
-      />
+      {role !== 'viewer' && (
+        <Menu
+          trigger={<Icon name="more" size={18} />}
+          triggerLabel="Workspace options"
+          triggerClassName="atl-icon"
+          items={[
+            { label: 'Edit', onSelect: () => { setName(ws.name); setEmoji(ws.emoji ?? ''); setNameError(undefined); setDialog('edit'); } },
+            // Only the owner may delete a workspace (the server rejects anyone else).
+            ...(role === 'owner'
+              ? [{ label: 'Delete', danger: true, disabled: only, hint: only ? 'Keep at least one workspace' : undefined, onSelect: () => setDialog('delete') }]
+              : []),
+          ]}
+        />
+      )}
       <Dialog open={dialog === 'edit'} title="Edit workspace" onClose={() => setDialog(null)}>
         <form
           className="atl-form"

@@ -58,7 +58,7 @@ export function BoardHeader({
         {account && (
           <div data-slot="share">
             <Button onClick={() => setSharing(true)}>Share</Button>
-            <ShareDialog workspace={workspace} account={account} open={sharing} onClose={() => setSharing(false)} />
+            <ShareDialog key={workspace.id} workspace={workspace} account={account} open={sharing} onClose={() => setSharing(false)} />
           </div>
         )}
       </div>

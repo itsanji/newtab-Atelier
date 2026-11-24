@@ -186,3 +186,43 @@ describe('restored and recovered', () => {
     expect((await chrome.storage.session.get(RECOVERED_KEY))[RECOVERED_KEY]).toBeUndefined();
   });
 });
+
+describe('sidebar and workspace switching', () => {
+  const second = async (ownerId: string) => {
+    await db.workspaces.put({ ...row('w2', ownerId), name: 'Mine', emoji: null, ownerId, sortKey: 'a1' });
+    await db.members.bulkPut([{ ...member('m9', 'u1', 'owner', 'u1@x.io'), workspaceId: 'w2' }]);
+  };
+
+  test('viewer workspace has no rename or delete in the sidebar; editors cannot delete', async () => {
+    const user = userEvent.setup();
+    await seed('u2', [member('m1', 'u2', 'owner', 'o@x.io'), member('m2', 'u1', 'viewer', 'u1@x.io')]);
+    await second('u1');
+    render(<App />);
+    const nav = await screen.findByRole('navigation', { name: 'Workspaces' });
+    await within(nav).findByText('Mine');
+    // Only "Mine" (owner) has an options menu.
+    await waitFor(() => expect(within(nav).getAllByRole('button', { name: 'Workspace options' })).toHaveLength(1));
+    // Make Team an editor workspace: Edit but no Delete.
+    await act(async () => { await db.members.put(member('m2', 'u1', 'editor', 'u1@x.io')); });
+    await waitFor(() => expect(within(nav).getAllByRole('button', { name: 'Workspace options' })).toHaveLength(2));
+    await user.click(within(nav).getAllByRole('button', { name: 'Workspace options' })[0]!);
+    expect(screen.getByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull();
+  });
+
+  test('share dialog shows the members of the workspace it is opened for', async () => {
+    const user = userEvent.setup();
+    routes['GET /api/workspaces/w1/members'] = () => ({ json: { members: [member('m1', 'u1', 'owner', 'u1@x.io', 'Ada'), member('m3', 'u3', 'editor', 'first@x.io')] } });
+    routes['GET /api/workspaces/w2/members'] = () => ({ status: 503, json: { error: 'down' } });
+    await seed('u1', [member('m1', 'u1', 'owner', 'u1@x.io', 'Ada')]);
+    await second('u1');
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Share' }));
+    expect(await screen.findByText('first@x.io')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Workspaces' })).getByRole('button', { name: /Mine/ }));
+    await user.click(await screen.findByRole('button', { name: 'Share' }));
+    await screen.findByRole('dialog');
+    expect(screen.queryByText('first@x.io')).toBeNull();
+  });
+});
