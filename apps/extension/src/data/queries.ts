@@ -1,5 +1,6 @@
 import { sortByKey, type Category, type Item, type Reminder, type Workspace } from '@atelier/core';
-import { LOCAL_USER, type AtelierDB } from './db';
+import type { AtelierDB } from './db';
+import { currentUserId } from '../account/account';
 
 export async function liveWorkspaces(db: AtelierDB): Promise<Workspace[]> {
   return sortByKey(await db.workspaces.filter((r) => r.deletedAt === null).toArray());
@@ -26,5 +27,5 @@ export async function setMeta(db: AtelierDB, key: string, value: unknown): Promi
 }
 
 export async function liveReminders(db: AtelierDB): Promise<Reminder[]> {
-  return db.reminders.filter((r) => r.deletedAt === null && r.userId === LOCAL_USER).toArray();
+  return db.reminders.filter((r) => r.deletedAt === null && r.userId === currentUserId()).toArray();
 }

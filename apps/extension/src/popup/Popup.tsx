@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Category, Workspace } from '@atelier/core';
-import { openDb, type AtelierDB } from '../data/db';
+import type { AtelierDB } from '../data/db';
 import { DbProvider, useDb } from '../data/DbContext';
+import { ActiveDbProvider } from '../account/activeDb';
 import { getMeta, liveCategories, liveWorkspaces, setMeta } from '../data/queries';
 import { createCategory, createItem } from '../data/repo';
 import { useTheme } from '../data/settings';
@@ -14,8 +15,6 @@ import { Button } from '../ui/components/Button';
 import { Dabs } from '../ui/components/Dabs';
 import { Field } from '../ui/components/Field';
 import { Icon } from '../ui/components/Icon';
-
-let defaultDb: AtelierDB | undefined;
 
 interface Loaded {
   tab: chrome.tabs.Tab | undefined;
@@ -188,8 +187,8 @@ function PopupBody({ initial }: { initial: Loaded }) {
   );
 }
 
-export function Popup({ db }: { db?: AtelierDB }) {
-  const [resolved] = useState(() => db ?? (defaultDb ??= openDb()));
+function PopupLoader() {
+  const resolved = useDb();
   const [initial, setInitial] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -210,10 +209,13 @@ export function Popup({ db }: { db?: AtelierDB }) {
   }
   if (!initial) return null;
   return (
-    <DbProvider db={resolved}>
-      <NoticeProvider>
-        <PopupBody initial={initial} />
-      </NoticeProvider>
-    </DbProvider>
+    <NoticeProvider>
+      <PopupBody initial={initial} />
+    </NoticeProvider>
   );
+}
+
+/** `db` is for tests; without it the active account's partition is opened. */
+export function Popup({ db }: { db?: AtelierDB }) {
+  return db ? <DbProvider db={db}><PopupLoader /></DbProvider> : <ActiveDbProvider><PopupLoader /></ActiveDbProvider>;
 }

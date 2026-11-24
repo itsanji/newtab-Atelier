@@ -14,6 +14,17 @@ export interface OutboxEntry {
   queuedAt: Iso;
 }
 
+/** A workspace membership row (plan-2 `Member`), synced down for sharing UI. */
+export interface Member {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  role: 'owner' | 'editor' | 'viewer';
+  email?: string;
+  displayName?: string;
+  [extra: string]: unknown;
+}
+
 export interface MetaEntry {
   key: string;
   value: unknown;
@@ -26,6 +37,7 @@ export class AtelierDB extends Dexie {
   reminders!: Table<Reminder, string>;
   outbox!: Table<OutboxEntry, string>;
   meta!: Table<MetaEntry, string>;
+  members!: Table<Member, string>;
 
   constructor(name: string) {
     super(name);
@@ -37,6 +49,7 @@ export class AtelierDB extends Dexie {
       outbox: 'key, seq',
       meta: 'key',
     });
+    this.version(2).stores({ members: 'id, workspaceId' });
   }
 }
 
@@ -51,4 +64,9 @@ export async function enqueue(db: AtelierDB, table: TableName, row: { id: string
 
 export function openDb(partition = 'local'): AtelierDB {
   return new AtelierDB(`atelier-${partition}`);
+}
+
+/** Delete a partition's database entirely (sign-out, account removal). */
+export async function deleteDb(partition: string): Promise<void> {
+  await Dexie.delete(`atelier-${partition}`);
 }

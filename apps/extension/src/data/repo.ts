@@ -1,5 +1,6 @@
 import { keyBetween, type Category, type Item, type Iso, type Reminder, type TableName, type Workspace } from '@atelier/core';
-import { enqueue, LOCAL_USER, type AtelierDB } from './db';
+import { enqueue, type AtelierDB } from './db';
+import { currentUserId } from '../account/account';
 import { liveCategories, liveItems, liveWorkspaces } from './queries';
 
 export const clock = { now: (): string => new Date().toISOString() };
@@ -34,10 +35,10 @@ async function live<R extends Row>(db: AtelierDB, table: TableName, id: string):
 }
 
 function base(now: string) {
-  return { id: crypto.randomUUID(), createdAt: now, updatedAt: now, deletedAt: null, updatedBy: LOCAL_USER };
+  return { id: crypto.randomUUID(), createdAt: now, updatedAt: now, deletedAt: null, updatedBy: currentUserId() };
 }
 
-export const stamp = (now: string) => ({ updatedAt: now, updatedBy: LOCAL_USER });
+export const stamp = (now: string) => ({ updatedAt: now, updatedBy: currentUserId() });
 export const tx = <T>(db: AtelierDB, fn: () => Promise<T>) =>
   db.transaction('rw', [db.workspaces, db.categories, db.items, db.reminders, db.outbox], fn);
 
@@ -212,7 +213,7 @@ export function deleteItem(db: AtelierDB, id: string): Promise<void> {
 
 async function liveReminder(db: AtelierDB, itemId: string): Promise<Reminder | undefined> {
   return (await db.reminders.where('itemId').equals(itemId).toArray())
-    .find((r) => r.deletedAt === null && r.userId === LOCAL_USER);
+    .find((r) => r.deletedAt === null && r.userId === currentUserId());
 }
 
 export function setReminder(db: AtelierDB, itemId: string, remindAt: Iso): Promise<Reminder> {
@@ -221,7 +222,7 @@ export function setReminder(db: AtelierDB, itemId: string, remindAt: Iso): Promi
     await live<Item>(db, 'items', itemId);
     const cur = await liveReminder(db, itemId);
     if (cur) return save(db, 'reminders', { ...cur, remindAt, remindedAt: null, ...stamp(now) }, now);
-    return save(db, 'reminders', { ...base(now), itemId, userId: LOCAL_USER, remindAt, remindedAt: null }, now);
+    return save(db, 'reminders', { ...base(now), itemId, userId: currentUserId(), remindAt, remindedAt: null }, now);
   });
 }
 

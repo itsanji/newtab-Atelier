@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { openDb, type AtelierDB } from '../data/db';
-import { DbProvider } from '../data/DbContext';
+import type { AtelierDB } from '../data/db';
+import { DbProvider, useDb } from '../data/DbContext';
+import { ActiveDbProvider } from '../account/activeDb';
 import { buildIndex, search } from '../data/search';
 import { SearchResults } from '../board/SearchResults';
 import { getMeta, liveWorkspaces, setMeta } from '../data/queries';
@@ -15,7 +16,6 @@ import { Sidebar } from '../board/Sidebar';
 import { useHighlightItem } from '../board/useHighlightItem';
 
 const SELECTED_KEY = 'selectedWorkspaceId';
-let defaultDb: AtelierDB | undefined;
 
 function Shell({ db }: { db: AtelierDB }) {
   const theme = useTheme();
@@ -83,20 +83,23 @@ function Shell({ db }: { db: AtelierDB }) {
   );
 }
 
-export function App({ db }: { db?: AtelierDB }) {
-  const [resolved] = useState(() => db ?? (defaultDb ??= openDb()));
+function Ready() {
+  const db = useDb();
   const [ready, setReady] = useState(false);
   useEffect(() => {
     let live = true;
-    void ensureSeed(resolved).then(() => live && setReady(true));
+    void ensureSeed(db).then(() => live && setReady(true));
     return () => { live = false; };
-  }, [resolved]);
+  }, [db]);
   if (!ready) return null;
   return (
-    <DbProvider db={resolved}>
-      <NoticeProvider>
-        <Shell db={resolved} />
-      </NoticeProvider>
-    </DbProvider>
+    <NoticeProvider>
+      <Shell db={db} />
+    </NoticeProvider>
   );
+}
+
+/** `db` is for tests; without it the active account's partition is opened. */
+export function App({ db }: { db?: AtelierDB }) {
+  return db ? <DbProvider db={db}><Ready /></DbProvider> : <ActiveDbProvider><Ready /></ActiveDbProvider>;
 }

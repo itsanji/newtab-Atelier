@@ -176,7 +176,12 @@ export function createChromeFake() {
           fake.storage.onChanged.dispatch(changes, 'local');
         }),
         remove: vi.fn(async (keys: string | string[]) => {
-          for (const k of typeof keys === 'string' ? [keys] : keys) delete store[k];
+          const changes: Record<string, { oldValue?: unknown }> = {};
+          for (const k of typeof keys === 'string' ? [keys] : keys) {
+            if (k in store) changes[k] = { oldValue: store[k] };
+            delete store[k];
+          }
+          fake.storage.onChanged.dispatch(changes, 'local');
         }),
         clear: vi.fn(async () => {
           for (const k of Object.keys(store)) delete store[k];
