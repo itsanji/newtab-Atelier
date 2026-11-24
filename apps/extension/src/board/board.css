@@ -91,3 +91,28 @@ a { color: var(--lily); }
 .atl-tabrow-fav { flex: none; width: 24px; height: 24px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; overflow: hidden; background: var(--canvas-sunk); }
 .atl-tabrow-title { flex: 1; min-width: 0; font-size: 14px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .atl-opentabs .im-btn { margin-top: var(--space-2); }
+
+/* Popup */
+.atl-popup { width: 380px; box-sizing: border-box; padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-5); }
+.atl-popup-head { display: flex; align-items: center; justify-content: space-between; }
+.atl-popup-brand { font-family: var(--font-serif); font-size: 26px; line-height: 30px; font-weight: 500; }
+.atl-popup-tab { display: flex; align-items: center; gap: var(--space-3); background: var(--canvas-raised); border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); padding: var(--space-4); }
+.atl-popup-tab img { flex: none; width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--lily-soft); object-fit: contain; padding: 4px; box-sizing: border-box; }
+.atl-popup-tab-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.atl-popup-title, .atl-popup-url { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.atl-popup-title { font-size: 14px; line-height: 20px; font-weight: 500; }
+.atl-popup-url { font-size: 13px; line-height: 18px; color: var(--ink-muted); }
+.atl-popup-section { display: flex; flex-direction: column; gap: var(--space-2); }
+.atl-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.atl-chip { font: inherit; font-size: 14px; line-height: 20px; font-weight: 500; height: 36px; padding: 0 14px; border-radius: var(--radius-pill); border: 1px solid var(--line-strong); background: var(--canvas-raised); color: var(--ink); cursor: pointer; }
+.atl-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.atl-chip[aria-checked='true'] { background: var(--lily-soft); border-color: var(--lily); color: var(--lily); }
+.atl-chip-new { border-style: dashed; color: var(--ink-muted); }
+.atl-check-row { display: flex; align-items: center; gap: var(--space-3); font-size: 14px; line-height: 20px; cursor: pointer; }
+.atl-check-row input { accent-color: var(--lily); width: 18px; height: 18px; margin: 0; }
+.atl-popup-actions { display: flex; flex-direction: column; gap: var(--space-2); }
+.atl-popup-actions .im-btn { width: 100%; }
+.atl-popup-link { align-self: center; font-size: 13px; line-height: 18px; padding: var(--space-2); color: var(--lily); }
+.atl-popup-link:hover { color: var(--ink); }
+.atl-popup-status { display: flex; align-items: center; gap: var(--space-2); font-size: 14px; line-height: 20px; color: var(--sage); margin: 0; }
+.atl-popup-hint { font-size: 13px; line-height: 18px; color: var(--ink-muted); margin: 0; }
