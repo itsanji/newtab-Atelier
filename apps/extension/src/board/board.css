@@ -37,12 +37,12 @@ a { color: var(--lily); }
 .atl-board::-webkit-scrollbar { display: none; }
 /* Wide windows: the page fits the window; the board fills the height under the header. */
 @media (min-width: 821px) {
-  .atl-shell { position: relative; flex-wrap: nowrap; height: 100vh; min-height: 0; overflow: hidden; padding-left: 44px; box-sizing: border-box; }
-  /* The sidebar rests as a 44px strip and opens over the board, without moving it, on hover or keyboard focus
-     (:focus-visible, so focus going back to a button after a mouse click doesn't hold it open). */
-  .atl-sidebar { position: absolute; inset: 0 auto 0 0; z-index: 30; width: 44px; overflow: hidden; padding: 0; transition: width var(--duration-quick) ease, box-shadow var(--duration-quick) ease; }
+  .atl-shell { flex-wrap: nowrap; height: 100vh; min-height: 0; overflow: hidden; }
+  /* The sidebar rests as a 44px strip. On hover or keyboard focus (:focus-visible, so focus going back to a
+     button after a mouse click doesn't hold it open) it widens in place and moves the board to the right. */
+  .atl-sidebar { position: relative; flex: 0 0 auto; width: 44px; overflow: hidden; padding: 0; transition: width var(--duration-quick) ease; }
   .atl-sidebar-inner { width: 260px; box-sizing: border-box; min-height: 100%; padding: var(--space-6) var(--space-5); display: flex; flex-direction: column; gap: var(--space-6); opacity: 0; visibility: hidden; transition: opacity var(--duration-quick) ease, visibility 0s linear var(--duration-quick); }
-  .atl-sidebar:hover, .atl-sidebar:has(:focus-visible) { width: 260px; overflow-y: auto; box-shadow: var(--shadow-lift); }
+  .atl-sidebar:hover, .atl-sidebar:has(:focus-visible) { width: 260px; overflow-y: auto; }
   .atl-sidebar:hover .atl-sidebar-inner, .atl-sidebar:has(:focus-visible) .atl-sidebar-inner { opacity: 1; visibility: visible; transition: opacity var(--duration-quick) ease; }
   .atl-sidebar-rail { position: absolute; top: var(--space-6); left: 0; width: 44px; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: opacity var(--duration-quick) ease; }
   .atl-sidebar-rail span { width: 18px; height: 4px; border-radius: 2px; background: var(--lily); }
