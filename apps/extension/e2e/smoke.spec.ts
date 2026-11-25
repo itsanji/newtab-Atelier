@@ -150,6 +150,14 @@ test('links drag into a folder, show as icons that open the site, and drag back 
   await expect(saved.locator('.atl-item', { hasText: 'Folder test site' })).toHaveCount(0);
   await expect(icon).toHaveAttribute('href', TEST_URL);
 
+  // No handles: the row and the icon are what you drag. A drag that ends on the icon itself doesn't open it.
+  await expect(board.locator('.atl-linkrow > .atl-grip').first()).toHaveCSS('opacity', '0');
+  const pagesBefore = context.pages().length;
+  const box = (await icon.boundingBox())!;
+  await drag(board, box, { x: box.x + box.width / 2 + 2, y: box.y + box.height / 2 + 2 });
+  await board.waitForTimeout(300);
+  expect(context.pages().length, 'a drag opened the link').toBe(pagesBefore);
+
   // A click opens the site.
   const opened = context.waitForEvent('page');
   await icon.click({ modifiers: ['Control'] });

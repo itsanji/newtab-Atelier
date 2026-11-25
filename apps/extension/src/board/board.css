@@ -234,3 +234,12 @@ a { color: var(--lily); }
 .atl-tile-letter { font-size: 15px; font-weight: 500; }
 .atl-tile-add { border: 1.5px dashed var(--line-strong); background: transparent; box-shadow: none; color: var(--ink-muted); cursor: pointer; font: inherit; }
 .atl-tile-add:hover { color: var(--ink); border-color: var(--ink-muted); box-shadow: none; }
+
+/* Links and folder headings drag from anywhere on them, like a plain list: no visible handle and no space
+   kept for one. The handle stays for keyboard users, out of the layout, and shows only when tabbed to. */
+.atl-linkrow > .atl-grip, .atl-folder-head > .atl-grip { position: absolute; left: -6px; top: 50%; transform: translateY(-50%); width: 20px; height: 28px; z-index: 1; background: var(--canvas-raised); }
+.atl-folder-head { position: relative; cursor: grab; }
+.atl-folder-head > .atl-grip { left: -8px; }
+.atl-item.atl-linkrow:hover > .atl-grip:not(:focus-visible), .atl-item.atl-linkrow:focus-within > .atl-grip:not(:focus-visible),
+.atl-folder:hover .atl-folder-head > .atl-grip:not(:focus-visible), .atl-folder:focus-within .atl-folder-head > .atl-grip:not(:focus-visible) { opacity: 0; }
+.atl-tile { cursor: pointer; }

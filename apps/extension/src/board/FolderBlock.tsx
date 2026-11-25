@@ -57,7 +57,8 @@ export function FolderBlock({ folder, links, autoRename = false, onAutoRenamed }
   const db = useDb();
   const run = useRun();
   const canEdit = useCanEdit();
-  const dnd = useSortableItem(folder, false);
+  // The heading drags the folder; a click on its name still renames.
+  const dnd = useSortableItem(folder, true);
   const zone = useFolderDrop(folder, !canEdit);
   const [renaming, setRenaming] = useState(autoRename);
   const [asList, setAsList] = useState(false);
@@ -81,7 +82,7 @@ export function FolderBlock({ folder, links, autoRename = false, onAutoRenamed }
       role="group"
       aria-label={`Folder ${name}`}
     >
-      <div className="atl-folder-head">
+      <div className="atl-folder-head" {...dnd.rowProps}>
         {dnd.handle}
         <Icon name="folder" size={16} className="atl-folder-icon" aria-hidden="true" />
         {renaming && canEdit ? (

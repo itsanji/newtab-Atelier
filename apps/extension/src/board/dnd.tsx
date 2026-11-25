@@ -1,4 +1,7 @@
-import { createContext, useContext, useState, type CSSProperties, type PointerEventHandler, type ReactNode } from 'react';
+import {
+  createContext, useContext, useEffect, useRef, useState,
+  type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type PointerEventHandler, type ReactNode,
+} from 'react';
 import {
   DndContext, DragOverlay, KeyboardSensor, PointerSensor, pointerWithin, closestCorners, useDroppable, useSensor, useSensors,
   type Active, type Announcements, type CollisionDetection, type DragEndEvent, type DragStartEvent, type Over,
@@ -276,9 +279,13 @@ export function useNewCategoryDrop(workspaceId: string, disabled = false) {
   return useDroppable({ id: `newcat:${workspaceId}`, disabled, data: { type: 'newcat', workspaceId, title: 'a new category' } });
 }
 
-/** Sortable wiring for an item row: `rowProps` go on the row, `handle` renders the grip. */
 export const CategoryNameContext = createContext('');
 
+/**
+ * Sortable wiring for an item: `rowProps` go on the row, `handle` renders the grip (for keyboard drags).
+ * With `pointerOnRow` the whole row drags with the pointer, and the click that ends a drag is swallowed so
+ * dropping a link never opens it.
+ */
 export function useSortableItem(item: Item, pointerOnRow: boolean, place: { folderId?: string | null; axis?: 'x' | 'y' } = {}) {
   const categoryName = useContext(CategoryNameContext);
   const label = item.title || (item.kind === 'link' ? domainOf(item.url ?? '') : '') || (item.kind === 'note' ? 'note' : item.kind === 'folder' ? 'folder' : 'item');
@@ -298,7 +305,19 @@ export function useSortableItem(item: Item, pointerOnRow: boolean, place: { fold
       {...s.listeners}
     />
   );
-  const onPointerDown = s.listeners?.onPointerDown as PointerEventHandler<HTMLElement> | undefined;
-  const rowProps = canEdit && pointerOnRow && onPointerDown ? { onPointerDown } : {};
+  const dragged = useRef(false);
+  useEffect(() => { if (s.isDragging) dragged.current = true; }, [s.isDragging]);
+  const pointerDown = s.listeners?.onPointerDown as PointerEventHandler<HTMLElement> | undefined;
+  const rowProps = canEdit && pointerOnRow && pointerDown
+    ? {
+      onPointerDown: (e: ReactPointerEvent<HTMLElement>) => { dragged.current = false; pointerDown(e); },
+      onClickCapture: (e: MouseEvent) => {
+        if (!dragged.current) return;
+        dragged.current = false;
+        e.preventDefault();
+        e.stopPropagation();
+      },
+    }
+    : {};
   return { setNodeRef: s.setNodeRef, style, handle, rowProps };
 }

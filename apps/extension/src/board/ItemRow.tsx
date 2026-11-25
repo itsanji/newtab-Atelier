@@ -41,7 +41,7 @@ export function ItemRow({ item, folderId = null }: { item: Item; folderId?: stri
 
   return (
     <div
-      className="atl-item"
+      className="atl-item atl-linkrow"
       data-item-id={item.id}
       ref={(el) => { row.current = el; dnd.setNodeRef(el); }}
       style={dnd.style}
