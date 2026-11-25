@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
-import { faviconUrl } from '../chrome/favicon';
+import { faviconUrl, useFaviconVersion } from '../chrome/favicon';
 import { listWindowTabs, saveAllAndClose } from '../chrome/tabs';
 import { useDb } from '../data/DbContext';
 import { Button } from '../ui/components/Button';
@@ -8,7 +8,9 @@ import { useNotify, useRun } from './Notice';
 
 function TabRow({ tab }: { tab: chrome.tabs.Tab }) {
   const title = tab.title || tab.url || 'Untitled';
-  const [broken, setBroken] = useState(false);
+  const favVersion = useFaviconVersion();
+  const [brokenAt, setBrokenAt] = useState<string | null>(null);
+  const broken = brokenAt === favVersion; // a new icon version gets another try
   const d = useDraggable({ id: `tab:${tab.id}`, data: { type: 'tab', title, tab: { url: tab.url, title: tab.title } } });
   return (
     <li
@@ -22,7 +24,7 @@ function TabRow({ tab }: { tab: chrome.tabs.Tab }) {
         <path d="M5 5h0M9 5h0M5 10h0M9 10h0M5 15h0M9 15h0" />
       </svg>
       <span className="atl-tabrow-fav">
-        {broken ? title.charAt(0).toUpperCase() : <img src={faviconUrl(tab.url ?? '', 16)} alt="" width={16} height={16} onError={() => setBroken(true)} />}
+        {broken ? title.charAt(0).toUpperCase() : <img src={faviconUrl(tab.url ?? '', 16)} alt="" width={16} height={16} onError={() => setBrokenAt(favVersion)} />}
       </span>
       <span className="atl-tabrow-title" title={title}>{title}</span>
     </li>

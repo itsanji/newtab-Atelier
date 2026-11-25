@@ -19,10 +19,19 @@ beforeEach(() => {
 
 describe('faviconUrl', () => {
   test('builds the _favicon endpoint url', () => {
-    expect(faviconUrl('https://a.com/x y')).toBe(
-      chrome.runtime.getURL('/_favicon/') + '?pageUrl=' + encodeURIComponent('https://a.com/x y') + '&size=32',
-    );
-    expect(faviconUrl('https://a.com', 16)).toMatch(/&size=16$/);
+    expect(faviconUrl('https://a.com/x y')).toMatch(new RegExp(
+      '^' + chrome.runtime.getURL('/_favicon/').replace(/[.?]/g, '\\$&') + '\\?pageUrl=' + encodeURIComponent('https://a.com/x y') + '&size=32&v=\\w+$',
+    ));
+    expect(faviconUrl('https://a.com', 16)).toMatch(/&size=16&v=\w+$/);
+  });
+
+  test('a tab that learns its icon gives every favicon a new address, so the cached globe is not reused', () => {
+    const fake = installChromeFake();
+    const before = faviconUrl('https://a.com');
+    fake.tabs.onUpdated.dispatch(1, { title: 'Loading' }, {} as never);
+    expect(faviconUrl('https://a.com')).toBe(before);
+    fake.tabs.onUpdated.dispatch(1, { favIconUrl: 'https://a.com/favicon.ico' } as never, {} as never);
+    expect(faviconUrl('https://a.com')).not.toBe(before);
   });
 });
 

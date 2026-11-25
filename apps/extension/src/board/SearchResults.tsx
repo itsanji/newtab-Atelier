@@ -1,5 +1,5 @@
 import type { SearchHit } from '../data/search';
-import { faviconUrl } from '../chrome/favicon';
+import { faviconUrl, useFaviconVersion } from '../chrome/favicon';
 import { useState } from 'react';
 
 const TONES = ['lily', 'sage', 'rose', 'ochre'] as const;
@@ -10,12 +10,14 @@ function hash(s: string): number {
 }
 
 function Tile({ hit, url }: { hit: SearchHit; url?: string }) {
-  const [broken, setBroken] = useState(false);
+  const favVersion = useFaviconVersion();
+  const [brokenAt, setBrokenAt] = useState<string | null>(null);
+  const broken = brokenAt === favVersion; // a new icon version gets another try
   const label = hit.title || (hit.kind === 'note' ? 'Untitled note' : '');
   return (
     <span className={`atl-fav atl-tone-${TONES[hash(hit.itemId) % 4]}`} aria-hidden="true">
       {hit.kind === 'link' && url && !broken ? (
-        <img src={faviconUrl(url)} alt="" width={20} height={20} onError={() => setBroken(true)} />
+        <img src={faviconUrl(url)} alt="" width={20} height={20} onError={() => setBrokenAt(favVersion)} />
       ) : (
         label.charAt(0).toUpperCase()
       )}

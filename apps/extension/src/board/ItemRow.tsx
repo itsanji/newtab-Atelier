@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { Item } from '@atelier/core';
-import { faviconUrl } from '../chrome/favicon';
+import { faviconUrl, useFaviconVersion } from '../chrome/favicon';
 import { useDb } from '../data/DbContext';
 import { deleteItem, updateItem } from '../data/repo';
 import { Menu } from '../ui/components/Menu';
@@ -26,7 +26,9 @@ export function ItemRow({ item }: { item: Item }) {
   const db = useDb();
   const run = useRun();
   const row = useRef<HTMLDivElement | null>(null);
-  const [broken, setBroken] = useState(false);
+  const favVersion = useFaviconVersion();
+  const [brokenAt, setBrokenAt] = useState<string | null>(null);
+  const broken = brokenAt === favVersion; // a new icon version gets another try
   const [editing, setEditing] = useState(false);
   const url = item.url ?? '';
   const domain = domainOf(url);
@@ -50,7 +52,7 @@ export function ItemRow({ item }: { item: Item }) {
           {broken ? (
             (item.title || domain).charAt(0).toUpperCase()
           ) : (
-            <img src={faviconUrl(url)} alt="" width={20} height={20} onError={() => setBroken(true)} />
+            <img src={faviconUrl(url)} alt="" width={20} height={20} onError={() => setBrokenAt(favVersion)} />
           )}
         </span>
         <span className="atl-item-text">
