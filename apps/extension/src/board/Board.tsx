@@ -26,7 +26,7 @@ export function Board({ workspace, view = 'columns', width = 300 }: { workspace:
   const [adding, setAdding] = useState(false);
   const canEdit = useCanEdit();
   const drop = useNewCategoryDrop(workspace.id, !canEdit);
-  const masonry = useMasonry(view === 'list', width, GAP, categories.length + 1);
+  const masonry = useMasonry(view === 'list', width, GAP, categories.map((c) => c.id).join(','));
   const place = (i: number): CSSProperties | undefined => masonry.places?.[i];
   const boardStyle = { '--atl-col-width': `${width}px`, ...(masonry.height !== null ? { height: masonry.height } : {}) } as CSSProperties;
 

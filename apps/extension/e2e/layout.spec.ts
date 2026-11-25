@@ -271,6 +271,22 @@ test('list view: same look as the board, as many fixed-width lanes as fit, only 
     if (width > 400) expect(m.widths, `${width}px: every category is 300px`).toEqual([300]);
   }
 
+  // Reordering re-places the categories (a reorder changes no sizes, so only the order can trigger it).
+  const titles = () => page.locator('.atl-column-title').allTextContents();
+  const before = await titles();
+  const grip = page.locator('.atl-column').last().getByRole('button', { name: 'Drag to reorder category' });
+  await grip.focus();
+  await page.keyboard.press('Space');
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForTimeout(120);
+    await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(120);
+  }
+  await page.keyboard.press('Space');
+  await expect.poll(titles).not.toEqual(before);
+  await expect.poll(async () => (await measure()).overlap, { message: 'categories overlap after a reorder' }).toBe(false);
+
   // Category size: every category takes the chosen width, in the list and on the board.
   await page.setViewportSize({ width: 1500, height: 900 });
   const sizes = page.getByRole('group', { name: 'Category size' });
@@ -291,10 +307,11 @@ test('list view: same look as the board, as many fixed-width lanes as fit, only 
   await expect.poll(async () => (await measure()).widths).toEqual([260]);
   // On a narrow window the slider stays on screen and the page still doesn't scroll sideways.
   await page.setViewportSize({ width: 400, height: 900 });
+  // The masonry re-places after the resize (a ResizeObserver callback): wait for it before measuring.
+  await expect.poll(async () => (await measure()).page, { message: 'page scrolls sideways at 400px' }).toBeLessThanOrEqual(0);
   const pop = await page.locator('.atl-size-pop').boundingBox();
   expect(pop!.x, 'slider starts off screen').toBeGreaterThanOrEqual(0);
   expect(pop!.x + pop!.width, 'slider runs off screen').toBeLessThanOrEqual(400);
-  expect((await measure()).page).toBeLessThanOrEqual(0);
   await page.keyboard.press('Escape');
   await expect(slider).toHaveCount(0);
   await page.setViewportSize({ width: 1500, height: 900 });

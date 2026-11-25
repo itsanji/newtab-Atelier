@@ -270,6 +270,8 @@ describe('signed in', () => {
     await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
     expect(await getAccount()).toEqual(account);
 
+    // The export keeps the buttons disabled until it has finished: click only once they are back.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign out anyway' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Sign out anyway' }));
     // The dialog closes once sign-out has finished.
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

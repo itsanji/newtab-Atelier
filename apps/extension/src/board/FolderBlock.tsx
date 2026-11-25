@@ -74,7 +74,7 @@ export function FolderBlock({ folder, links, autoRename = false, onAutoRenamed }
   const db = useDb();
   const run = useRun();
   const canEdit = useCanEdit();
-  // The heading drags the folder; a click on its name still renames.
+  // The heading drags the folder; a click on its name expands or collapses it (renaming is in the menu).
   const dnd = useSortableItem(folder, true);
   const zone = useFolderDrop(folder, !canEdit);
   const [renaming, setRenaming] = useState(autoRename);

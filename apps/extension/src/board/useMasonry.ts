@@ -9,9 +9,10 @@ const same = (a: Layout | null, b: Layout) =>
  * Masonry for the list view: as many lanes of `width` as fit the container, and each child, in order, goes
  * into the currently shortest lane. Children keep their place in the DOM (absolute positions), so nothing
  * remounts and drag and drop keeps working. Re-placed when the container's width or any child's height
- * changes. Returns null (plain wrapping) where it can't measure.
+ * changes, and whenever `order` (the children's ids in order) does: a reorder changes which child sits at
+ * which index without resizing anything. Returns null (plain wrapping) where it can't measure.
  */
-export function useMasonry(enabled: boolean, width: number, gap: number, count: number) {
+export function useMasonry(enabled: boolean, width: number, gap: number, order: string) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [layout, setLayout] = useState<Layout | null>(null);
 
@@ -41,7 +42,7 @@ export function useMasonry(enabled: boolean, width: number, gap: number, count: 
     ro.observe(el);
     for (const kid of Array.from(el.children)) ro.observe(kid);
     return () => ro.disconnect();
-  }, [enabled, width, gap, count]);
+  }, [enabled, width, gap, order]);
 
   return { ref, places: layout?.places ?? null, height: layout?.height ?? null };
 }
