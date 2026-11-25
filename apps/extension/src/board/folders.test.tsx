@@ -60,7 +60,8 @@ describe('folders on the board', () => {
     expect(name).toHaveFocus();
     await user.keyboard('{Escape}');
     expect(await within(col).findByRole('group', { name: 'Folder 0 sites' })).toBeInTheDocument();
-    await user.click(within(col).getByRole('button', { name: '0 sites' }));
+    await user.click(within(col).getByRole('button', { name: 'Folder options' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Rename' }));
     await user.type(within(col).getByRole('textbox', { name: 'Folder name' }), 'Daily{Enter}');
     expect(await within(col).findByRole('group', { name: 'Folder Daily' })).toBeInTheDocument();
     expect((await liveItems(db, saved.id)).map((i) => [i.kind, i.title])).toEqual([['folder', 'Daily']]);
@@ -79,18 +80,29 @@ describe('folders on the board', () => {
     expect(await view(saved.id)).toEqual({ top: ['Tools'], inside: [['monkeytype.com']] });
   });
 
-  test('"Show as list" lists the links with their menus; "Remove folder, keep links" puts them back', async () => {
+  test('clicking the name expands the folder into a list with menus, remembered after a reload; "Remove folder, keep links" puts them back', async () => {
     const user = userEvent.setup();
     const { saved, link, folder } = await setup();
     const f = await folder('Docs');
     await link('a', f.id);
     await link('b', f.id);
-    render(<App db={db} />);
+    const view1 = render(<App db={db} />);
     const group = await screen.findByRole('group', { name: 'Folder Docs' });
-    await user.click(within(group).getByRole('button', { name: 'Folder options' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Show as list' }));
+    const toggle = within(group).getByRole('button', { name: 'Docs' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(within(group).queryAllByRole('button', { name: 'Link options' })).toHaveLength(0);
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(within(group).getAllByRole('button', { name: 'Link options' })).toHaveLength(2);
-    await user.click(within(group).getByRole('button', { name: 'Folder options' }));
+    expect(within(group).getByText('a.example')).toBeInTheDocument();
+    // Still expanded on the next new tab.
+    view1.unmount();
+    render(<App db={db} />);
+    const again = await screen.findByRole('group', { name: 'Folder Docs' });
+    expect(within(again).getByRole('button', { name: 'Docs' })).toHaveAttribute('aria-expanded', 'true');
+    await user.click(within(again).getByRole('button', { name: 'Docs' }));
+    expect(within(again).getByRole('button', { name: 'Docs' })).toHaveAttribute('aria-expanded', 'false');
+    await user.click(within(again).getByRole('button', { name: 'Folder options' }));
     await user.click(screen.getByRole('menuitem', { name: 'Remove folder, keep links' }));
     await waitFor(async () => expect(await view(saved.id)).toEqual({ top: ['a', 'b'], inside: [] }));
   });

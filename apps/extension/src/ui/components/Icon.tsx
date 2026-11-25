@@ -2,7 +2,7 @@ import type { ReactElement, SVGProps } from 'react';
 
 export type IconName =
   | 'plus' | 'more' | 'moon' | 'sun' | 'search' | 'grip' | 'close'
-  | 'bell' | 'share' | 'external' | 'trash' | 'edit' | 'check' | 'contrast' | 'user' | 'folder';
+  | 'bell' | 'share' | 'external' | 'trash' | 'edit' | 'check' | 'contrast' | 'user' | 'folder' | 'chevron';
 
 const paths: Record<IconName, ReactElement> = {
   plus: <path d="M12 5v14M5 12h14" />,
@@ -20,6 +20,7 @@ const paths: Record<IconName, ReactElement> = {
   contrast: (<><circle cx="12" cy="12" r="8" /><path d="M12 4v16M8 8.5l4 0M6.5 12H12M8 15.5h4" /></>),
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
   folder: <path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />,
+  chevron: <path d="M9 6l6 6-6 6" />,
   user: (<><circle cx="12" cy="8.5" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></>),
 };
 

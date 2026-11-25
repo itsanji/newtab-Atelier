@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { SortableContext, rectSortingStrategy, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { Item } from '@atelier/core';
 import { faviconUrl, useFaviconVersion } from '../chrome/favicon';
@@ -15,6 +15,23 @@ import { LinkForm } from './LinkForm';
 import { useRun } from './Notice';
 import { useCanEdit, VIEW_ONLY } from './useRole';
 import { domainOf } from './url';
+
+const OPEN_KEY = 'atelier.openFolders';
+const openFolders = (): Set<string> => {
+  try { return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) ?? '[]') as string[]); } catch { return new Set(); }
+};
+
+/** Whether a folder is expanded. Remembered on this device (not synced), like a disclosure in a file browser. */
+function useFolderOpen(id: string): [boolean, (open: boolean) => void] {
+  const [open, setOpen] = useState(() => openFolders().has(id));
+  const set = useCallback((next: boolean) => {
+    setOpen(next);
+    const all = openFolders();
+    if (next) all.add(id); else all.delete(id);
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify([...all])); } catch { /* storage full or blocked: only this page remembers */ }
+  }, [id]);
+  return [open, set];
+}
 
 export const folderName = (folder: Item, count: number) => folder.title.trim() || `${count} ${count === 1 ? 'site' : 'sites'}`;
 
@@ -61,7 +78,8 @@ export function FolderBlock({ folder, links, autoRename = false, onAutoRenamed }
   const dnd = useSortableItem(folder, true);
   const zone = useFolderDrop(folder, !canEdit);
   const [renaming, setRenaming] = useState(autoRename);
-  const [asList, setAsList] = useState(false);
+  // Expanded shows the links as a list (titles, addresses, menus); collapsed, as icons. Kept per folder.
+  const [asList, setAsList] = useFolderOpen(folder.id);
   const [adding, setAdding] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const box = useRef<HTMLDivElement | null>(null);
@@ -84,24 +102,28 @@ export function FolderBlock({ folder, links, autoRename = false, onAutoRenamed }
     >
       <div className="atl-folder-head" {...dnd.rowProps}>
         {dnd.handle}
-        <Icon name="folder" size={16} className="atl-folder-icon" aria-hidden="true" />
         {renaming && canEdit ? (
-          <InlineNameField
-            label="Folder name"
-            placeholder="Name this folder"
-            initial={folder.title}
-            onCancel={() => finishRename(null)}
-            onCommit={(value) => finishRename(value)}
-          />
+          <>
+            <Icon name="folder" size={16} className="atl-folder-icon" aria-hidden="true" />
+            <InlineNameField
+              label="Folder name"
+              placeholder="Name this folder"
+              initial={folder.title}
+              onCancel={() => finishRename(null)}
+              onCommit={(value) => finishRename(value)}
+            />
+          </>
         ) : (
           <button
             type="button"
             className="atl-folder-name"
-            onClick={() => setRenaming(true)}
-            disabled={!canEdit}
-            title={canEdit ? name : VIEW_ONLY}
+            aria-expanded={asList}
+            onClick={() => setAsList(!asList)}
+            title={asList ? `Collapse ${name}` : `Expand ${name}`}
           >
-            {name}
+            <Icon name="chevron" size={14} className={asList ? 'atl-folder-chevron atl-folder-chevron-open' : 'atl-folder-chevron'} aria-hidden="true" />
+            <Icon name="folder" size={16} className="atl-folder-icon" aria-hidden="true" />
+            <span className="atl-folder-label">{name}</span>
           </button>
         )}
         <span className="atl-folder-count" aria-label={`${links.length} links`}>{links.length}</span>
@@ -113,7 +135,6 @@ export function FolderBlock({ folder, links, autoRename = false, onAutoRenamed }
             items={[
               { label: 'Add link', onSelect: () => setAdding(true) },
               { label: 'Rename', onSelect: () => setRenaming(true) },
-              { label: asList ? 'Show as icons' : 'Show as list', onSelect: () => setAsList((v) => !v) },
               { label: 'Remove folder, keep links', onSelect: () => void run(deleteFolder(db, folder.id)) },
               { label: 'Delete folder and links', danger: true, onSelect: () => (links.length ? setConfirming(true) : void run(deleteFolder(db, folder.id))) },
             ]}
