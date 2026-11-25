@@ -36,7 +36,8 @@ export function buildIndex(rows: { items: Item[]; categories: Category[]; worksp
   const categories = new Map(rows.categories.filter((c) => c.deletedAt === null).map((c) => [c.id, c]));
   const docs: Doc[] = [];
   for (const item of rows.items) {
-    if (item.deletedAt !== null) continue;
+    // A folder is a container, not something to find; its links are indexed on their own.
+    if (item.deletedAt !== null || item.kind === 'folder') continue;
     const category = categories.get(item.categoryId);
     const workspace = category && workspaces.get(category.workspaceId);
     if (!category || !workspace) continue;

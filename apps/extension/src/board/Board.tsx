@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type WheelEvent } from 'react';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Workspace } from '@atelier/core';
@@ -13,6 +13,16 @@ import { CategoryColumn } from './CategoryColumn';
 import { useNewCategoryDrop } from './dnd';
 import { useCanEdit, VIEW_ONLY } from './useRole';
 
+/**
+ * The board scrolls sideways. A plain wheel over the gaps between columns (not over a column, which scrolls
+ * its own items) moves it sideways too, so a mouse without a horizontal wheel can reach every column.
+ */
+function wheelSideways(e: WheelEvent<HTMLDivElement>) {
+  if (e.deltaX !== 0 || e.shiftKey || e.ctrlKey) return;
+  if ((e.target as Element).closest('.atl-column, .atl-newcat')) return;
+  e.currentTarget.scrollLeft += e.deltaY;
+}
+
 export function Board({ workspace }: { workspace: Workspace }) {
   const db = useDb();
   const run = useRun();
@@ -22,7 +32,7 @@ export function Board({ workspace }: { workspace: Workspace }) {
   const drop = useNewCategoryDrop(workspace.id, !canEdit);
 
   return (
-    <div className="atl-board" data-popover-bounds>
+    <div className="atl-board" data-popover-bounds onWheel={wheelSideways}>
       <SortableContext items={categories.map((c) => c.id)} strategy={rectSortingStrategy}>
         {categories.map((c) => <CategoryColumn key={c.id} category={c} onOpenAll={() => void run(openAll(db, c.id))} />)}
       </SortableContext>

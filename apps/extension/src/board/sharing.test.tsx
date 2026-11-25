@@ -29,8 +29,8 @@ async function seed(ownerId: string, members: Member[], opts: { restored?: boole
   await db.transaction('rw', db.workspaces, db.categories, db.items, db.members, db.meta, async () => {
     await db.workspaces.put({ ...row('w1', ownerId), name: 'Team', emoji: null, ownerId, sortKey: 'a0' });
     await db.categories.put({ ...row('c1', ownerId), workspaceId: 'w1', name: 'Reading', emoji: null, sortKey: 'a0', tabGroup: null, shareToken: opts.shareToken ?? null });
-    await db.items.put({ ...row('i1', ownerId), categoryId: 'c1', kind: 'link', sortKey: 'a0', title: 'Docs', url: 'https://docs.example/', faviconUrl: null, note: null, body: null, done: false, restored: opts.restored ?? false });
-    await db.items.put({ ...row('i2', ownerId), categoryId: 'c1', kind: 'todo', sortKey: 'a1', title: 'Water plants', url: null, faviconUrl: null, note: null, body: null, done: false, restored: false });
+    await db.items.put({ ...row('i1', ownerId), categoryId: 'c1', kind: 'link', sortKey: 'a0', title: 'Docs', url: 'https://docs.example/', faviconUrl: null, note: null, body: null, done: false, folderId: null, restored: opts.restored ?? false });
+    await db.items.put({ ...row('i2', ownerId), categoryId: 'c1', kind: 'todo', sortKey: 'a1', title: 'Water plants', url: null, faviconUrl: null, note: null, body: null, done: false, folderId: null, restored: false });
     await db.members.bulkPut(members);
     await db.meta.put({ key: CURSOR_KEY, value: 1 });
   });

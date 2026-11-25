@@ -236,15 +236,15 @@ async function applyItem(ctx: Ctx, i: Item): Promise<Outcome> {
   const body = jsonParam(i.body);
   if (existing) {
     await tx`update items set category_id = ${i.categoryId}, kind = ${i.kind}, sort_key = ${i.sortKey}, title = ${i.title},
-      url = ${i.url}, favicon_url = null, note = ${i.note}, body = ${body}::text::jsonb, done = ${i.done},
+      url = ${i.url}, favicon_url = null, note = ${i.note}, body = ${body}::text::jsonb, done = ${i.done}, folder_id = ${i.folderId},
       restored = ${restored}, deleted_at = ${i.deletedAt}, updated_by = ${user.id}, version = nextval('change_seq'),
       updated_at = greatest(${now}, updated_at + interval '1 millisecond')
       where id = ${i.id}`;
   } else {
-    await tx`insert into items (id, category_id, kind, sort_key, title, url, favicon_url, note, body, done, restored,
+    await tx`insert into items (id, category_id, kind, sort_key, title, url, favicon_url, note, body, done, folder_id, restored,
         created_at, updated_at, deleted_at, updated_by, version)
       values (${i.id}, ${i.categoryId}, ${i.kind}, ${i.sortKey}, ${i.title}, ${i.url}, null, ${i.note},
-        ${body}::text::jsonb, ${i.done}, ${restored}, ${i.createdAt}, ${now}, ${i.deletedAt}, ${user.id},
+        ${body}::text::jsonb, ${i.done}, ${i.folderId}, ${restored}, ${i.createdAt}, ${now}, ${i.deletedAt}, ${user.id},
         nextval('change_seq'))`;
   }
   if (moved) {

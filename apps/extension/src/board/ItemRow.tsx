@@ -22,7 +22,8 @@ function hash(s: string): number {
   return h;
 }
 
-export function ItemRow({ item }: { item: Item }) {
+/** A link as a row. `folderId` is set when the row is listed inside a folder. */
+export function ItemRow({ item, folderId = null }: { item: Item; folderId?: string | null }) {
   const db = useDb();
   const run = useRun();
   const row = useRef<HTMLDivElement | null>(null);
@@ -33,7 +34,7 @@ export function ItemRow({ item }: { item: Item }) {
   const url = item.url ?? '';
   const domain = domainOf(url);
   const canEdit = useCanEdit();
-  const dnd = useSortableItem(item, true);
+  const dnd = useSortableItem(item, true, { folderId });
   const tone = TONES[hash(item.id) % 4];
 
   const remove = () => removeAndRefocus(row.current, () => run(deleteItem(db, item.id)));

@@ -38,7 +38,10 @@ test.afterAll(async () => {
   rmSync(userDataDir, { recursive: true, force: true });
 });
 
-/** Fails with the offending measurements when anything makes the page or the board scroll sideways. */
+/**
+ * Fails with the offending measurements when anything makes the page scroll sideways. The board is the one
+ * thing that scrolls sideways, inside itself; its columns stay 300px and fit its height.
+ */
 async function expectNoHorizontalOverflow(page: Page, label: string) {
   const m = await page.evaluate(() => {
     const doc = document.documentElement;
@@ -60,7 +63,6 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
     };
   });
   expect(m.doc.scroll, `${label}: page scrolls sideways`).toBeLessThanOrEqual(m.doc.client);
-  if (m.board) expect(m.board.scroll, `${label}: board scrolls sideways`).toBeLessThanOrEqual(m.board.client);
   for (const w of m.columns) expect(w, `${label}: column wider than 300px`).toBeLessThanOrEqual(301);
   for (const h of m.heads) {
     expect(h.offRow, `${label}: head of "${h.name}" wrapped onto a second row`).toBeLessThanOrEqual(2);
@@ -79,7 +81,7 @@ async function rightmostColumn(page: Page) {
   return page.locator('.atl-column').nth(index);
 }
 
-test('long content never makes the board scroll sideways', async () => {
+test('long content never makes the page scroll sideways', async () => {
   const page = await context.newPage();
   await page.setViewportSize({ width: 1500, height: 900 });
   await page.goto(`chrome-extension://${extensionId}/src/newtab/index.html`);
@@ -179,6 +181,27 @@ test('long content never makes the board scroll sideways', async () => {
     await expectNoHorizontalOverflow(page, `${width}px, reminder picker open`);
     await page.keyboard.press('Escape');
   }
+
+  // Many columns: the board scrolls sideways inside itself, a wheel over a gap moves it, and the page stays put.
+  await page.setViewportSize({ width: 1024, height: 700 });
+  const board = page.locator('.atl-board');
+  const sizes = await board.evaluate((b) => ({ scroll: b.scrollWidth, client: b.clientWidth }));
+  expect(sizes.scroll, 'board holds more columns than fit').toBeGreaterThan(sizes.client);
+  const gap = await page.evaluate(() => {
+    const [a, b] = Array.from(document.querySelectorAll('.atl-column')).map((c) => c.getBoundingClientRect());
+    return { x: (a!.right + b!.left) / 2, y: a!.top + 10 };
+  });
+  await page.mouse.move(gap.x, gap.y);
+  await page.mouse.wheel(0, 400);
+  await expect.poll(() => board.evaluate((b) => b.scrollLeft)).toBeGreaterThan(0);
+  // Wide windows fit the page to the window: columns scroll their own items instead of growing the page.
+  const tall = await page.evaluate(() => ({
+    page: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+    tallest: Math.max(...Array.from(document.querySelectorAll('.atl-column')).map((c) => c.getBoundingClientRect().bottom)),
+    view: window.innerHeight,
+  }));
+  expect(tall.page, 'page scrolls up and down').toBeLessThanOrEqual(0);
+  expect(tall.tallest, 'a column runs past the window').toBeLessThanOrEqual(tall.view);
 
   // Search results with the long title
   await page.setViewportSize({ width: 400, height: 900 });

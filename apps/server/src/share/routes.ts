@@ -102,7 +102,7 @@ export function sharePublicRoutes(sql: SQL): Hono {
     const [cat] = await sql`select c.id, c.name, c.emoji from categories c join workspaces w on w.id = c.workspace_id
       where c.share_token = ${token} and c.deleted_at is null and w.deleted_at is null`;
     if (!cat) return html(renderNotFoundPage(), 404);
-    const rows = await sql`select kind, title, url, note, body, done from items
+    const rows = await sql`select id, kind, title, url, note, body, done, folder_id as "folderId" from items
       where category_id = ${cat.id} and deleted_at is null order by sort_key collate "C", id`;
     return html(renderSharePage(cat, rows as ShareItem[]), 200);
   });

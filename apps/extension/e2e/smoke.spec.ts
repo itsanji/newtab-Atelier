@@ -111,3 +111,59 @@ test('theme button switches to nocturne', async () => {
   await expect(html).toHaveClass(/nocturne/);
   await page.close();
 });
+
+/** Real pointer drag from one element's centre to a point. */
+async function drag(page: Page, from: { x: number; y: number; width: number; height: number }, to: { x: number; y: number }) {
+  const sx = from.x + from.width / 2;
+  const sy = from.y + from.height / 2;
+  await page.mouse.move(sx, sy);
+  await page.mouse.down();
+  await page.mouse.move(sx + 10, sy + 10, { steps: 4 });
+  await page.mouse.move(to.x, to.y, { steps: 20 });
+  await page.mouse.up();
+}
+
+test('links drag into a folder, show as icons that open the site, and drag back out', async () => {
+  const board = await openNewTab();
+  const saved = board.getByRole('region', { name: 'Saved' });
+  await expect(saved).toBeVisible();
+
+  // A link and a folder in Saved.
+  await saved.getByRole('button', { name: 'Add', exact: true }).click();
+  await board.getByRole('menuitem', { name: 'Link' }).click();
+  await saved.getByLabel('Web address').fill(TEST_URL);
+  await saved.getByLabel('Title').fill('Folder test site');
+  await saved.getByRole('button', { name: 'Add link' }).click();
+  await saved.getByRole('button', { name: 'Add', exact: true }).click();
+  await board.getByRole('menuitem', { name: 'Folder' }).click();
+  await saved.getByRole('textbox', { name: 'Folder name' }).fill('Daily');
+  await saved.getByRole('textbox', { name: 'Folder name' }).press('Enter');
+  const folder = saved.getByRole('group', { name: 'Folder Daily' });
+  await expect(folder).toBeVisible();
+
+  // Drag the row onto the folder's grid: it becomes an icon inside.
+  const row = saved.locator('.atl-item', { hasText: 'Folder test site' });
+  const grid = (await folder.locator('.atl-folder-body').boundingBox())!;
+  await drag(board, (await row.boundingBox())!, { x: grid.x + grid.width - 20, y: grid.y + grid.height / 2 });
+  const icon = folder.getByRole('link', { name: 'Folder test site' });
+  await expect(icon).toBeVisible();
+  await expect(saved.locator('.atl-item', { hasText: 'Folder test site' })).toHaveCount(0);
+  await expect(icon).toHaveAttribute('href', TEST_URL);
+
+  // A click opens the site.
+  const opened = context.waitForEvent('page');
+  await icon.click({ modifiers: ['Control'] });
+  await (await opened).close();
+
+  // Drag the icon out onto the Notes column: it leaves the folder.
+  const notes = board.getByRole('region', { name: 'Notes' });
+  const to = (await notes.boundingBox())!;
+  await drag(board, (await icon.boundingBox())!, { x: to.x + to.width / 2, y: to.y + Math.min(to.height / 2, 100) });
+  await expect(notes.locator('.atl-item', { hasText: 'Folder test site' })).toBeVisible();
+  await expect(folder.getByRole('link')).toHaveCount(0);
+
+  await board.reload();
+  await expect(board.getByRole('group', { name: 'Folder Daily' })).toBeVisible();
+  await expect(board.getByRole('region', { name: 'Notes' }).locator('.atl-item', { hasText: 'Folder test site' })).toBeVisible();
+  await board.close();
+});

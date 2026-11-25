@@ -8,16 +8,17 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Category, Item } from '@atelier/core';
 import { useDb } from '../data/DbContext';
 import type { AtelierDB } from '../data/db';
-import { liveCategories, liveItems } from '../data/queries';
+import { liveCategories } from '../data/queries';
 import { saveTab, savedLabel } from '../chrome/tabs';
-import { createCategory, moveCategory, moveItem, tx } from '../data/repo';
+import { createCategory, levelItems, moveCategory, moveItem, tx } from '../data/repo';
 import { IconButton } from '../ui/components/IconButton';
 import { useNotify, useRun } from './Notice';
 import { useCanEdit } from './useRole';
 import { domainOf } from './url';
 
 export type Placement = 'before' | 'after';
-export type DragType = 'item' | 'category' | 'tab' | 'workspace' | 'newcat';
+/** `folder` is a folder's drop zone (its icon grid); the folder itself drags as an `item`. */
+export type DragType = 'item' | 'category' | 'tab' | 'workspace' | 'newcat' | 'folder';
 
 export function computeItemDrop(
   target: { categoryId: string; overItemId: string | null; placement: Placement },
@@ -46,20 +47,39 @@ export type DropEnd = {
   placement: Placement;
 };
 
-type ItemTarget = { categoryId: string; overItemId: string | null } | { notice: string } | null;
+type ItemTarget = { categoryId: string; folderId: string | null; overItemId: string | null } | { notice: string } | null;
 
-/** Where an item or tab dropped on `over` lands; null when `over` can't take it. */
-async function itemTarget(db: AtelierDB, over: { type: DragType; id: string }): Promise<ItemTarget> {
+/** The folder `item` really sits in (its folderId names a live folder of the same category), else null. */
+async function folderOf(db: AtelierDB, item: Item): Promise<string | null> {
+  if (item.kind === 'folder' || !item.folderId) return null;
+  const f = await db.items.get(item.folderId);
+  return f && f.deletedAt === null && f.kind === 'folder' && f.categoryId === item.categoryId ? f.id : null;
+}
+
+/**
+ * Where an item or tab dropped on `over` lands; null when `over` can't take it. Only links (and tabs, which
+ * become links) go in folders: anything else dropped on or in a folder lands next to the folder instead.
+ */
+async function itemTarget(db: AtelierDB, over: { type: DragType; id: string }, intoFolders: boolean): Promise<ItemTarget> {
   if (over.type === 'item') {
     const row = await db.items.get(over.id);
     if (!row || row.deletedAt !== null) return null;
-    return { categoryId: row.categoryId, overItemId: over.id };
+    const folderId = await folderOf(db, row);
+    if (folderId && !intoFolders) return { categoryId: row.categoryId, folderId: null, overItemId: folderId };
+    return { categoryId: row.categoryId, folderId, overItemId: over.id };
   }
-  if (over.type === 'category') return { categoryId: over.id, overItemId: null };
+  if (over.type === 'folder') {
+    const f = await db.items.get(over.id);
+    if (!f || f.deletedAt !== null || f.kind !== 'folder') return null;
+    return intoFolders
+      ? { categoryId: f.categoryId, folderId: f.id, overItemId: null }
+      : { categoryId: f.categoryId, folderId: null, overItemId: f.id };
+  }
+  if (over.type === 'category') return { categoryId: over.id, folderId: null, overItemId: null };
   if (over.type === 'workspace') {
     const first = (await liveCategories(db, over.id))[0];
     if (!first) return { notice: 'Add a category to that workspace first' };
-    return { categoryId: first.id, overItemId: null };
+    return { categoryId: first.id, folderId: null, overItemId: null };
   }
   return null;
 }
@@ -81,30 +101,35 @@ export async function applyDrop(
   }
 
   if (active.type === 'item') {
-    const t = await itemTarget(db, over);
+    const cur = await db.items.get(active.id);
+    if (!cur || cur.deletedAt !== null) return null;
+    // A folder dropped on its own grid stays where it is.
+    if (over.type === 'folder' && over.id === active.id) return null;
+    const t = await itemTarget(db, over, cur.kind === 'link');
     if (!t) return null;
     if ('notice' in t) return t.notice;
-    const { categoryId, overItemId } = t;
-    const all = await liveItems(db, categoryId);
+    const { categoryId, folderId, overItemId } = t;
+    if (overItemId === active.id) return null;
+    const all = await levelItems(db, categoryId, folderId);
     const siblings = all.filter((s) => s.id !== active.id);
     const target = computeItemDrop({ categoryId, overItemId, placement }, siblings);
     const at = all.findIndex((s) => s.id === active.id);
-    // Same category with the same neighbours means nothing moves: skip the write.
+    // Same level with the same neighbours means nothing moves: skip the write.
     if (at >= 0 && target.beforeId === (all[at - 1]?.id ?? null) && target.afterId === (all[at + 1]?.id ?? null)) return null;
-    await moveItem(db, active.id, target);
+    await moveItem(db, active.id, { ...target, folderId });
     return null;
   }
 
   if (active.type === 'tab') {
     if (!active.tab?.url) return null;
-    const t = await itemTarget(db, over);
+    const t = await itemTarget(db, over, true);
     if (!t) return null;
     if ('notice' in t) return t.notice;
-    const { categoryId, overItemId } = t;
+    const { categoryId, folderId, overItemId } = t;
     // Saved straight at its place: one write, no separate move.
     const target = overItemId === null
-      ? { categoryId }
-      : computeItemDrop({ categoryId, overItemId, placement }, await liveItems(db, categoryId));
+      ? { categoryId, folderId }
+      : { ...computeItemDrop({ categoryId, overItemId, placement }, await levelItems(db, categoryId, folderId)), folderId };
     await saveTab(db, active.tab as chrome.tabs.Tab, target);
     return null;
   }
@@ -124,6 +149,12 @@ export async function applyDrop(
 
 type DragData = {
   type?: DragType; title?: string; categoryName?: string; workspaceId?: string; tab?: { url?: string; title?: string };
+  /** On items: the folder an item sits in. On a folder's drop zone: the folder. */
+  folderId?: string | null;
+  /** On items: their kind. */
+  kind?: Item['kind'];
+  /** Icons in a folder's grid sit side by side: drop before or after by x, not y. */
+  axis?: 'x' | 'y';
 };
 
 /**
@@ -142,8 +173,16 @@ export const collisions: CollisionDetection = (args) => {
   // Keyboard drags have no pointer: they move by the sortable coordinates, so take the closest target.
   if (!args.pointerCoordinates) return closestCorners(args);
   const hits = pointerWithin(args);
-  const kindOf = (id: unknown) => (args.droppableContainers.find((c) => c.id === id)?.data.current as DragData | undefined)?.type;
-  const rank = (id: unknown) => (kindOf(id) === 'workspace' ? 0 : kindOf(id) === 'item' ? 1 : 2);
+  const dataOf = (id: unknown) => args.droppableContainers.find((c) => c.id === id)?.data.current as DragData | undefined;
+  // Most specific first: a sidebar workspace, an icon in a folder, a folder's grid, an item, then a column.
+  const rank = (id: unknown) => {
+    const d = dataOf(id);
+    if (d?.type === 'workspace') return 0;
+    if (d?.type === 'item' && d.folderId) return 1;
+    if (d?.type === 'folder') return 2;
+    if (d?.type === 'item') return 3;
+    return 4;
+  };
   return [...hits].sort((a, b) => rank(a.id) - rank(b.id));
 };
 
@@ -199,8 +238,11 @@ export function BoardDnd({ children }: { children: ReactNode }) {
     if (!e.over || !a?.type || !o?.type) return;
     const drop: DropEnd = {
       active: { type: a.type, id: String(e.active.id), tab: a.tab },
-      over: { type: o.type, id: o.type === 'newcat' ? (o.workspaceId ?? '') : String(e.over.id) },
-      placement: a.type === 'category' ? categoryPlacement(e.active, e.over) : placementOf(e.active, e.over, 'y'),
+      over: {
+        type: o.type,
+        id: o.type === 'newcat' ? (o.workspaceId ?? '') : o.type === 'folder' ? (o.folderId ?? '') : String(e.over.id),
+      },
+      placement: a.type === 'category' ? categoryPlacement(e.active, e.over) : placementOf(e.active, e.over, o.axis ?? 'y'),
     };
     void run(applyDrop(db, drop).then((msg) => { if (msg) notify(msg); }));
   };
@@ -220,6 +262,15 @@ export function BoardDnd({ children }: { children: ReactNode }) {
   );
 }
 
+/** Makes a folder's icon grid a drop target: links and tabs dropped on it go in the folder, at the end. */
+export function useFolderDrop(folder: Item, disabled = false) {
+  const categoryName = useContext(CategoryNameContext);
+  return useDroppable({
+    id: `folder:${folder.id}`, disabled,
+    data: { type: 'folder', folderId: folder.id, title: folder.title ? `folder ${folder.title}` : 'the folder', categoryName } satisfies DragData,
+  });
+}
+
 /** Makes the New category tile a drop target for items and tabs. */
 export function useNewCategoryDrop(workspaceId: string, disabled = false) {
   return useDroppable({ id: `newcat:${workspaceId}`, disabled, data: { type: 'newcat', workspaceId, title: 'a new category' } });
@@ -228,11 +279,14 @@ export function useNewCategoryDrop(workspaceId: string, disabled = false) {
 /** Sortable wiring for an item row: `rowProps` go on the row, `handle` renders the grip. */
 export const CategoryNameContext = createContext('');
 
-export function useSortableItem(item: Item, pointerOnRow: boolean) {
+export function useSortableItem(item: Item, pointerOnRow: boolean, place: { folderId?: string | null; axis?: 'x' | 'y' } = {}) {
   const categoryName = useContext(CategoryNameContext);
-  const label = item.title || (item.kind === 'link' ? domainOf(item.url ?? '') : '') || (item.kind === 'note' ? 'note' : 'item');
+  const label = item.title || (item.kind === 'link' ? domainOf(item.url ?? '') : '') || (item.kind === 'note' ? 'note' : item.kind === 'folder' ? 'folder' : 'item');
   const canEdit = useCanEdit();
-  const s = useSortable({ id: item.id, disabled: !canEdit, data: { type: 'item', title: label, categoryId: item.categoryId, categoryName } });
+  const data: DragData & { categoryId: string } = {
+    type: 'item', title: label, categoryId: item.categoryId, categoryName, kind: item.kind, folderId: place.folderId ?? null, axis: place.axis,
+  };
+  const s = useSortable({ id: item.id, disabled: !canEdit, data });
   const style: CSSProperties = { transform: CSS.Translate.toString(s.transform), transition: s.transition, opacity: s.isDragging ? 0.4 : undefined };
   const handle = !canEdit ? null : (
     <IconButton

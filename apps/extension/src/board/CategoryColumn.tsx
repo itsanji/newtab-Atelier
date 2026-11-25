@@ -2,7 +2,7 @@ import { useRef, useState, type CSSProperties } from 'react';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { Category } from '@atelier/core';
+import { arrangeItems, type Category } from '@atelier/core';
 import { useDb } from '../data/DbContext';
 import { liveItems } from '../data/queries';
 import { deleteCategory, updateCategory } from '../data/repo';
@@ -21,6 +21,7 @@ import { ApiClient } from '../sync/api';
 import { syncNow } from '../sync/localWrites';
 import { AddItemMenu } from './AddItemMenu';
 import { CategoryNameContext } from './dnd';
+import { FolderBlock } from './FolderBlock';
 import { ItemRow } from './ItemRow';
 import { NoteItem } from './NoteItem';
 import { TodoItem } from './TodoItem';
@@ -35,8 +36,12 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
   const section = useRef<HTMLElement | null>(null);
   const sort = useSortable({ id: category.id, disabled: !canEdit, data: { type: 'category', title: category.name } });
   const style: CSSProperties = { transform: CSS.Translate.toString(sort.transform), transition: sort.transition, opacity: sort.isDragging ? 0.4 : undefined };
-  const items = useLiveQuery(() => liveItems(db, category.id), [db, category.id]) ?? [];
+  const all = useLiveQuery(() => liveItems(db, category.id), [db, category.id]) ?? [];
+  const { top, inFolder } = arrangeItems(all);
+  /** What the user saved here: folders hold items but don't count as one. */
+  const items = all.filter((i) => i.kind !== 'folder');
   const [renaming, setRenaming] = useState(false);
+  /** A note or folder just added from the Add menu: its editor or name field opens once it mounts. */
   const [freshNote, setFreshNote] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   /** Set when a confirmed delete starts: where focus goes once the column (and its dialog) unmounts. */
@@ -132,14 +137,24 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
         )}
       </div>
       <CategoryNameContext.Provider value={category.name}>
-      <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-      {items.map((item) => {
+      <div className="atl-column-body">
+      <SortableContext items={top.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+      {top.map((item) => {
+        if (item.kind === 'folder') {
+          return (
+            <FolderBlock
+              key={item.id} folder={item} links={inFolder.get(item.id) ?? []}
+              autoRename={item.id === freshNote} onAutoRenamed={() => setFreshNote(null)}
+            />
+          );
+        }
         if (item.kind === 'link') return <ItemRow key={item.id} item={item} />;
         if (item.kind === 'note') return <NoteItem key={item.id} item={item} autoFocus={item.id === freshNote} onAutoFocused={() => setFreshNote(null)} />;
         if (item.kind === 'todo') return <TodoItem key={item.id} item={item} />;
         return null;
       })}
       </SortableContext>
+      </div>
       </CategoryNameContext.Provider>
       <Dialog
         open={confirming}

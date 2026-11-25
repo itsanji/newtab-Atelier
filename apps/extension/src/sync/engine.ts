@@ -129,7 +129,7 @@ export function rowTitle(entry: Pick<OutboxEntry, 'table' | 'row'>): string {
   const row = entry.row as { title?: unknown; name?: unknown; kind?: unknown };
   const named = nonEmpty(row.title) ?? nonEmpty(row.name);
   if (named) return `“${named.length > 60 ? `${named.slice(0, 59)}…` : named}”`;
-  if (entry.table === 'items') return row.kind === 'note' ? 'A note' : row.kind === 'todo' ? 'A to-do' : 'A link';
+  if (entry.table === 'items') return row.kind === 'note' ? 'A note' : row.kind === 'todo' ? 'A to-do' : row.kind === 'folder' ? 'A folder' : 'A link';
   return { workspaces: 'A workspace', categories: 'A category', reminders: 'A reminder' }[entry.table];
 }
 
@@ -276,13 +276,15 @@ export async function recover(
     if (items.length) {
       const cat = await recoveredCategory(db, userId, t);
       let last = (await liveItems(db, cat.id)).at(-1)?.sortKey ?? null;
+      for (const item of items) copyOf.set(item.id, crypto.randomUUID());
       for (const item of items) {
+        // A link recovered along with its folder stays in the folder's copy.
         const copy = syncableItem({
-          ...item, id: crypto.randomUUID(), categoryId: cat.id, sortKey: appendKey(last),
+          ...item, id: copyOf.get(item.id)!, categoryId: cat.id, sortKey: appendKey(last),
+          folderId: (item.folderId && copyOf.get(item.folderId)) ?? null,
           createdAt: t, updatedAt: t, updatedBy: userId, deletedAt: null, restored: false,
         });
         last = copy.sortKey;
-        copyOf.set(item.id, copy.id);
         await db.items.put(copy);
         await enqueue(db, 'items', copy, t);
       }
@@ -315,7 +317,8 @@ export function syncableItem(item: Item): Item {
   if (itemSchema.safeParse(item).success) return item;
   const fixed: Item = {
     ...item,
-    kind: (['link', 'note', 'todo'] as const).includes(item.kind) ? item.kind : 'note',
+    kind: (['link', 'note', 'todo', 'folder'] as const).includes(item.kind) ? item.kind : 'note',
+    folderId: typeof item.folderId === 'string' ? item.folderId : null,
     title: asText(item.title),
     faviconUrl: typeof item.faviconUrl === 'string' ? item.faviconUrl : null,
     note: item.note == null ? null : asText(item.note),

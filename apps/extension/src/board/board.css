@@ -23,9 +23,20 @@ a { color: var(--lily); }
 .atl-header h1 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 0; font-family: var(--font-serif); font-size: 36px; line-height: 42px; font-weight: 500; }
 .atl-header-slots { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); min-width: 0; max-width: 100%; }
 
-/* Columns wrap onto new rows instead of scrolling sideways; each keeps 300px, or the board's width when narrower. */
-.atl-board { display: flex; flex-wrap: wrap; gap: var(--space-5); align-items: flex-start; min-width: 0; padding: var(--space-1) var(--space-1) var(--space-5); }
-.atl-column { flex: 0 0 300px; width: 300px; min-width: 0; max-width: 100%; box-sizing: border-box; background: var(--canvas-raised); border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); padding: 20px var(--space-4) var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); }
+/* Columns sit side by side in one row and the board scrolls sideways; each column scrolls its own items. */
+.atl-board { display: flex; flex-wrap: nowrap; gap: var(--space-5); align-items: flex-start; min-width: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; padding: var(--space-1) var(--space-1) var(--space-4); }
+.atl-column { flex: 0 0 300px; width: 300px; min-width: 0; max-height: 75vh; box-sizing: border-box; background: var(--canvas-raised); border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); padding: 20px var(--space-4) var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); }
+.atl-column-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: var(--space-1); margin: 0 calc(-1 * var(--space-2)); padding: 2px var(--space-2); }
+.atl-column-head, .atl-column-foot { flex: none; }
+/* Wide windows: the page fits the window; the board fills the height under the header. */
+@media (min-width: 821px) {
+  .atl-shell { flex-wrap: nowrap; height: 100vh; min-height: 0; overflow: hidden; }
+  .atl-sidebar { overflow-y: auto; flex: 0 0 260px; }
+  .atl-main { min-height: 0; overflow-y: auto; }
+  .atl-board { flex: 1 1 auto; min-height: 320px; }
+  .atl-column { max-height: 100%; }
+  .atl-newcat { align-self: flex-start; }
+}
 /* Tags wrap below the title when a row has no room for them. */
 /* One row in a 300px column: compact grip/emoji buttons; the title gives way first (down to 2em, then two
    lines); only the long "Tab group · N" tag may shorten with an ellipsis; the count and "Public" never do. */
@@ -62,7 +73,7 @@ a { color: var(--lily); }
 .atl-tone-rose { background: var(--rose-soft); color: var(--rose); }
 .atl-tone-ochre { background: var(--ochre-soft); color: var(--ochre-ink); }
 
-.atl-newcat { flex: 0 0 240px; min-width: 0; max-width: 100%; box-sizing: border-box; min-height: 320px; border: 1.5px dashed var(--line-strong); border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; padding: var(--space-5); color: var(--ink-muted); }
+.atl-newcat { flex: 0 0 240px; min-width: 0; box-sizing: border-box; min-height: 320px; border: 1.5px dashed var(--line-strong); border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; padding: var(--space-5); color: var(--ink-muted); }
 .atl-newcat-over { border-color: var(--lily); background: var(--lily-soft); }
 .atl-newcat-btn { font: inherit; display: flex; flex-direction: column; align-items: center; gap: var(--space-2); text-align: center; background: transparent; border: 0; color: inherit; cursor: pointer; border-radius: var(--radius-md); padding: var(--space-3); }
 .atl-newcat-title { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--ink); }
@@ -197,3 +208,27 @@ a { color: var(--lily); }
   .atl-main { padding: var(--space-5) var(--space-4) var(--space-6); }
   .atl-sidebar { padding: var(--space-5) var(--space-4); }
 }
+
+/* Folders: a small heading over a grid of site icons, for quick access. */
+.atl-folder { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-1) 0; padding: var(--space-2) var(--space-2) var(--space-3); background: var(--canvas); border-radius: var(--radius-md); min-width: 0; }
+.atl-folder-head { display: flex; align-items: center; gap: var(--space-1); min-width: 0; color: var(--ink-muted); }
+.atl-folder-head .atl-grip, .atl-folder-head .atl-icon { width: 28px; height: 28px; }
+.atl-folder:hover .atl-folder-head .atl-grip, .atl-folder:focus-within .atl-folder-head .atl-grip { opacity: 1; }
+.atl-folder-icon { flex: none; }
+.atl-folder-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 12px; line-height: 18px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: inherit; background: transparent; border: 0; padding: 0; cursor: text; text-align: left; border-radius: var(--radius-sm); }
+.atl-folder-name:disabled { cursor: default; }
+.atl-folder-name:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.atl-folder-head .im-field { flex: 1 1 80px; min-width: 0; }
+.atl-folder-count { flex: none; font-size: 12px; line-height: 18px; }
+.atl-folder-body { min-width: 0; border-radius: var(--radius-md); }
+.atl-folder-grid { display: flex; flex-wrap: wrap; gap: var(--space-2); min-height: 40px; }
+.atl-folder-list { display: flex; flex-direction: column; gap: var(--space-1); min-height: 32px; }
+.atl-folder-over { outline: 2px dashed var(--lily); outline-offset: 2px; background: var(--lily-soft); }
+.atl-folder-empty { margin: 0; padding: var(--space-2); font-size: 13px; color: var(--ink-muted); }
+.atl-tile { flex: none; width: 40px; height: 40px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-md); background: var(--canvas-raised); box-shadow: var(--shadow-soft); color: var(--ink); text-decoration: none; touch-action: none; }
+.atl-tile:hover { box-shadow: var(--shadow-lift); }
+.atl-tile:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.atl-tile img { width: 24px; height: 24px; border-radius: 4px; }
+.atl-tile-letter { font-size: 15px; font-weight: 500; }
+.atl-tile-add { border: 1.5px dashed var(--line-strong); background: transparent; box-shadow: none; color: var(--ink-muted); cursor: pointer; font: inherit; }
+.atl-tile-add:hover { color: var(--ink); border-color: var(--ink-muted); box-shadow: none; }

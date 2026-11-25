@@ -28,12 +28,12 @@ export async function listWindowTabs(windowId?: number): Promise<chrome.tabs.Tab
  */
 export function saveTab(
   db: AtelierDB, tab: chrome.tabs.Tab,
-  target: { categoryId: string; position?: 'start' | 'end'; beforeId?: string | null; afterId?: string | null },
+  target: { categoryId: string; folderId?: string | null; position?: 'start' | 'end'; beforeId?: string | null; afterId?: string | null },
 ): Promise<Item> {
   const url = tab.url ?? '';
   return createItem(db, {
     categoryId: target.categoryId, kind: 'link', title: tab.title || url, url,
-    faviconUrl: null, position: target.position, beforeId: target.beforeId, afterId: target.afterId,
+    faviconUrl: null, folderId: target.folderId ?? null, position: target.position, beforeId: target.beforeId, afterId: target.afterId,
   });
 }
 

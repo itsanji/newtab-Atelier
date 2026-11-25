@@ -48,7 +48,7 @@ export const categorySchema = z.object({
 export const itemSchema = z.object({
   ...rowBase,
   categoryId: uuid,
-  kind: z.enum(['link', 'note', 'todo']),
+  kind: z.enum(['link', 'note', 'todo', 'folder']),
   sortKey,
   title: z.string(),
   url: linkUrl.nullable(),
@@ -56,6 +56,8 @@ export const itemSchema = z.object({
   note: z.string().nullable(),
   body: z.unknown().nullable(),
   done: z.boolean(),
+  // Older exports and clients have no folders.
+  folderId: uuid.nullable().default(null),
   restored: z.boolean().default(false),
 });
 

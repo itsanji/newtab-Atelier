@@ -1,4 +1,4 @@
-import { keyBetween, type Category, type Item, type Iso, type Reminder, type TableName, type Workspace } from '@atelier/core';
+import { arrangeItems, keyBetween, type Category, type Item, type Iso, type Reminder, type TableName, type Workspace } from '@atelier/core';
 import Dexie from 'dexie';
 import { enqueue, type AtelierDB } from './db';
 import { currentUserId } from '../account/account';
@@ -225,6 +225,8 @@ export function createItem(
   input: {
     id?: string; categoryId: string; kind: Item['kind']; title: string; url?: string | null; faviconUrl?: string | null;
     note?: string | null; body?: unknown; position?: 'start' | 'end';
+    /** Put it in this folder (links only); anything that isn't a live folder in the category means the top level. */
+    folderId?: string | null;
     /** Place between these neighbours (overrides `position`) when either is given. */
     beforeId?: string | null; afterId?: string | null;
   },
@@ -232,7 +234,8 @@ export function createItem(
   return tx(db, async () => {
     const now = clock.now();
     await live<Category>(db, 'categories', input.categoryId);
-    const siblings = await liveItems(db, input.categoryId);
+    const folderId = input.kind === 'folder' ? null : await folderIn(db, input.categoryId, input.folderId ?? null);
+    const siblings = await levelItems(db, input.categoryId, folderId);
     const sortKey = input.beforeId !== undefined || input.afterId !== undefined
       ? await keyFor(db, 'items', input.beforeId ?? null, input.afterId ?? null)
       : input.position === 'start'
@@ -241,10 +244,23 @@ export function createItem(
     const row: Item = {
       ...base(now), ...(input.id ? { id: input.id } : {}), categoryId: input.categoryId, kind: input.kind, sortKey, title: input.title,
       url: input.url ?? null, faviconUrl: input.faviconUrl ?? null, note: input.note ?? null,
-      body: input.body ?? null, done: false, restored: false,
+      body: input.body ?? null, done: false, folderId, restored: false,
     };
     return save(db, 'items', row, now);
   });
+}
+
+/** `folderId` when it names a live folder in the category, else null (the top level). */
+async function folderIn(db: AtelierDB, categoryId: string, folderId: string | null): Promise<string | null> {
+  if (!folderId) return null;
+  const f = await db.items.get(folderId);
+  return f && f.deletedAt === null && f.kind === 'folder' && f.categoryId === categoryId ? folderId : null;
+}
+
+/** The live items at one level of a category: its top level (folderId null) or one folder's contents. */
+export async function levelItems(db: AtelierDB, categoryId: string, folderId: string | null): Promise<Item[]> {
+  const { top, inFolder } = arrangeItems(await liveItems(db, categoryId));
+  return folderId ? (inFolder.get(folderId) ?? []) : top;
 }
 
 export function updateItem(
@@ -258,14 +274,50 @@ export function updateItem(
 }
 
 export function moveItem(
-  db: AtelierDB, id: string, target: { categoryId: string; beforeId: string | null; afterId: string | null },
+  db: AtelierDB, id: string,
+  target: { categoryId: string; beforeId: string | null; afterId: string | null; folderId?: string | null },
 ): Promise<Item> {
   return tx(db, async () => {
     const now = clock.now();
     const cur = await live<Item>(db, 'items', id);
     await live<Category>(db, 'categories', target.categoryId);
+    // Folders stay one level deep: a folder never goes in a folder, and only links do.
+    const folderId = cur.kind === 'link' ? await folderIn(db, target.categoryId, target.folderId ?? null) : null;
     const sortKey = await keyFor(db, 'items', target.beforeId, target.afterId);
-    return save(db, 'items', { ...cur, categoryId: target.categoryId, sortKey, restored: false, ...stamp(now) }, now);
+    const moved = await save(db, 'items', { ...cur, categoryId: target.categoryId, folderId, sortKey, restored: false, ...stamp(now) }, now);
+    // A folder takes its links along to another category.
+    if (cur.kind === 'folder' && cur.categoryId !== target.categoryId) {
+      for (const it of (await liveItems(db, cur.categoryId)).filter((i) => i.folderId === id)) {
+        await save(db, 'items', { ...it, categoryId: target.categoryId, restored: false, ...stamp(now) }, now);
+      }
+    }
+    return moved;
+  });
+}
+
+/**
+ * Removes a folder. Its links go back to the top of the category where the folder was, in their order,
+ * or, with `withLinks`, are deleted too.
+ */
+export function deleteFolder(db: AtelierDB, id: string, opts: { withLinks?: boolean } = {}): Promise<void> {
+  return tx(db, async () => {
+    const now = clock.now();
+    const folder = await live<Item>(db, 'items', id);
+    const { top, inFolder } = arrangeItems(await liveItems(db, folder.categoryId));
+    const links = inFolder.get(id) ?? [];
+    const at = top.findIndex((i) => i.id === id);
+    const next = top[at + 1]?.sortKey ?? null;
+    let prev = top[at - 1]?.sortKey ?? null;
+    for (const it of links) {
+      if (opts.withLinks) {
+        await save(db, 'items', { ...it, deletedAt: now, ...stamp(now) }, now);
+        continue;
+      }
+      const sortKey = next !== null && prev !== null && prev >= next ? appendKey(prev) : keyBetween(prev, next);
+      prev = sortKey;
+      await save(db, 'items', { ...it, folderId: null, sortKey, restored: false, ...stamp(now) }, now);
+    }
+    await save(db, 'items', { ...folder, deletedAt: now, ...stamp(now) }, now);
   });
 }
 

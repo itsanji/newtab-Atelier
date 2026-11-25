@@ -69,7 +69,7 @@ const serverCat = (id: string, workspaceId: string, extra: Partial<Category> = {
 });
 const serverItem = (id: string, categoryId: string, extra: Partial<Item> = {}): Item => ({
   ...row, id, categoryId, kind: 'link', sortKey: 'a0', title: 'Server item', url: 'https://s.example/x',
-  faviconUrl: null, note: null, body: null, done: false, restored: false, ...extra,
+  faviconUrl: null, note: null, body: null, done: false, folderId: null, restored: false, ...extra,
 });
 
 /** A fake server that answers 413 to any push whose JSON body is over `limit` bytes. */

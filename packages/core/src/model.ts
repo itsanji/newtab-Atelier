@@ -26,7 +26,8 @@ export interface Category extends RowBase {
   shareToken: string | null;
 }
 
-export type ItemKind = 'link' | 'note' | 'todo';
+/** A folder is an item that holds links: a grid of site icons for quick access, one level deep. */
+export type ItemKind = 'link' | 'note' | 'todo' | 'folder';
 
 export interface Item extends RowBase {
   categoryId: string;
@@ -40,6 +41,12 @@ export interface Item extends RowBase {
   /** TipTap JSON for note items. */
   body: unknown | null;
   done: boolean;
+  /**
+   * The folder (an item of kind `folder` in the same category) this item sits in, or null at the top of the
+   * category. A folderId that names no live folder in the same category reads as null, so a conflict never
+   * hides an item.
+   */
+  folderId: string | null;
   /** Set by the server when a push put this item back under a parent another device had deleted. */
   restored: boolean;
 }

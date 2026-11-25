@@ -58,6 +58,7 @@ export const itemToWire = (r: DbRow): Item => ({
   note: r.note,
   body: r.body ?? null,
   done: r.done,
+  folderId: r.folder_id ?? null,
   restored: r.restored,
 });
 

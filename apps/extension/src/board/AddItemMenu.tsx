@@ -46,6 +46,11 @@ export function AddItemMenu({ categoryId, onCreated }: { categoryId: string; onC
     onCreated?.(id);
     void run(createItem(db, { id, categoryId, kind: 'note', title: '', body: null }));
   };
+  const addFolder = () => {
+    const id = crypto.randomUUID();
+    onCreated?.(id);
+    void run(createItem(db, { id, categoryId, kind: 'folder', title: '' }));
+  };
   if (!canEdit) {
     return (
       <button type="button" className="im-btn im-btn-ghost" disabled title={VIEW_ONLY}>
@@ -61,6 +66,7 @@ export function AddItemMenu({ categoryId, onCreated }: { categoryId: string; onC
         { label: 'Link', onSelect: () => setAdding('link') },
         { label: 'Note', onSelect: () => addNote() },
         { label: 'To-do', onSelect: () => setAdding('todo') },
+        { label: 'Folder', onSelect: () => addFolder() },
       ]}
     />
   );

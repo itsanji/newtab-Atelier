@@ -1,10 +1,13 @@
-import { isLinkUrl } from '@atelier/core';
+import { arrangeItems, isLinkUrl } from '@atelier/core';
 
 export const escapeHtml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 export interface ShareItem {
-  kind: 'link' | 'note' | 'todo';
+  /** Needed only to place links in their folders. */
+  id?: string;
+  folderId?: string | null;
+  kind: 'link' | 'note' | 'todo' | 'folder';
   title: string;
   url: string | null;
   note: string | null;
@@ -77,6 +80,9 @@ p{margin:4px 0 0;white-space:pre-wrap}
 .mark{flex:none;width:1.2em;color:var(--lily)}
 .todo.done .text{color:var(--ink-muted);text-decoration:line-through}
 .empty{color:var(--ink-muted)}
+.folder ul{gap:6px;margin-top:8px}
+.folder ul li{box-shadow:none;background:var(--canvas);padding:8px 12px}
+.folder .count{color:var(--ink-muted);font-size:.85rem}
 footer{max-width:640px;margin:0 auto;padding:24px 16px 48px;color:var(--ink-muted);font-size:.85rem;text-align:center}
 `;
 
@@ -108,9 +114,17 @@ function renderItem(item: ShareItem): string {
   return `<li><h2 class="item-title">${escapeHtml(item.title)}</h2>${paras}</li>`;
 }
 
+function renderFolder(folder: ShareItem, links: ShareItem[]): string {
+  const name = folder.title.trim() || `${links.length} ${links.length === 1 ? 'site' : 'sites'}`;
+  const inner = links.length ? `<ul>${links.map(renderItem).join('')}</ul>` : '';
+  return `<li class="folder"><h2 class="item-title">${escapeHtml(name)}</h2>${inner}</li>`;
+}
+
 export function renderSharePage(category: ShareCategory, items: ShareItem[]): string {
   const emoji = category.emoji ? `<span class="emoji">${escapeHtml(category.emoji)}</span>` : '';
-  const list = items.length ? `<ul>${items.map(renderItem).join('')}</ul>` : `<p class="empty">Nothing here yet.</p>`;
+  const { top, inFolder } = arrangeItems(items.map((it, n) => ({ ...it, id: it.id ?? `row-${n}`, folderId: it.folderId ?? null })));
+  const render = (it: (typeof top)[number]) => (it.kind === 'folder' ? renderFolder(it, inFolder.get(it.id) ?? []) : renderItem(it));
+  const list = top.length ? `<ul>${top.map(render).join('')}</ul>` : `<p class="empty">Nothing here yet.</p>`;
   return layout(category.name, `<main><h1>${emoji}${escapeHtml(category.name)}</h1>${list}</main>`);
 }
 

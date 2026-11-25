@@ -101,6 +101,40 @@ describe('share links', () => {
     expect(html.replace('<!doctype html>', '')).not.toContain('!');
   });
 
+  test('folders sync both ways and show their links on the share page', async () => {
+    ctx = await makeApp();
+    const owner = await signUp(ctx.app, 'owner@example.com');
+    const { cat } = await seed(owner.token);
+    const folder = crypto.randomUUID();
+    await push(owner.token, [
+      item(cat, { id: folder, kind: 'folder', title: 'SNS', sortKey: 'a1' }),
+      item(cat, { title: 'Inside one', sortKey: 'a0', url: 'https://in.example/', folderId: folder }),
+      item(cat, { title: 'Top link', sortKey: 'a0', url: 'https://top.example/' }),
+      item(cat, { title: 'Lost folder link', sortKey: 'a2', url: 'https://lost.example/', folderId: crypto.randomUUID() }),
+    ]);
+    const pulled = (await (await ctx.app.request('/api/sync/pull?cursor=0', { headers: bearer(owner.token) })).json()) as any;
+    const inside = pulled.items.find((i: any) => i.title === 'Inside one');
+    expect(inside.folderId).toBe(folder);
+    expect(pulled.items.find((i: any) => i.id === folder).kind).toBe('folder');
+    expect(pulled.items.find((i: any) => i.title === 'Top link').folderId).toBeNull();
+
+    const { shareToken } = (await (await share(owner.token, cat)).json()) as any;
+    const html = await (await ctx.app.request(`/s/${shareToken}`)).text();
+    // Top link, then the folder holding its link, then the link whose folder doesn't exist.
+    expect(html).toMatch(/Top link[\s\S]*<li class="folder"><h2 class="item-title">SNS<\/h2><ul><li><a[^>]*>Inside one[\s\S]*Lost folder link/);
+  });
+
+  test('a push without folderId (an older client) is accepted as top level', async () => {
+    ctx = await makeApp();
+    const owner = await signUp(ctx.app, 'owner@example.com');
+    const { cat } = await seed(owner.token);
+    const old = item(cat, { title: 'Old client' });
+    delete (old.row as Record<string, unknown>).folderId;
+    await push(owner.token, [old]);
+    const pulled = (await (await ctx.app.request('/api/sync/pull?cursor=0', { headers: bearer(owner.token) })).json()) as any;
+    expect(pulled.items[0].folderId).toBeNull();
+  });
+
   test('share page 404s for revoked and deleted, escapes content', async () => {
     ctx = await makeApp();
     const owner = await signUp(ctx.app, 'owner@example.com');
