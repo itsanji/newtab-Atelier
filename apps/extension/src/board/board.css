@@ -274,9 +274,8 @@ a { color: var(--lily); }
 .atl-board-list .atl-column-foot { padding: 2px 0 0; }
 .atl-board-list .atl-column-foot .im-btn, .atl-board-list .atl-textlink { font-size: 12px; }
 /* One line per link: icon, title, address on the right. */
-.atl-board-list .atl-item-link { gap: var(--space-2); padding: 3px var(--space-1); }
-.atl-board-list .atl-fav { width: 20px; height: 20px; font-size: 11px; border-radius: 5px; }
-.atl-board-list .atl-fav img { width: 16px; height: 16px; }
+.atl-board-list .atl-item-link { gap: var(--space-3); padding: 2px var(--space-1); }
+/* Icons keep the board's size (32px links, 40px folder icons); only the spacing around them is tighter. */
 .atl-board-list .atl-item-text { flex-direction: row; align-items: baseline; gap: var(--space-2); }
 .atl-board-list .atl-item-title { flex: 1 1 auto; min-width: 0; font-size: 13px; line-height: 20px; }
 .atl-board-list .atl-item-domain { flex: 0 1 auto; max-width: 45%; font-size: 12px; line-height: 20px; }
@@ -286,9 +285,6 @@ a { color: var(--lily); }
 .atl-board-list .atl-note-well { padding: var(--space-2) var(--space-3); font-size: 13px; line-height: 20px; }
 /* Smaller folders. */
 .atl-board-list .atl-folder { margin: 2px 0; padding: 4px var(--space-1) var(--space-1); gap: var(--space-1); }
-.atl-board-list .atl-folder-grid { gap: var(--space-1); min-height: 30px; }
-.atl-board-list .atl-tile { width: 30px; height: 30px; border-radius: 7px; }
-.atl-board-list .atl-tile img { width: 18px; height: 18px; }
 /* The New category tile becomes a small block at the end. */
 .atl-board-list .atl-newcat { display: flex; width: auto; max-width: 420px; min-height: 0; break-inside: avoid; padding: var(--space-2); border-radius: var(--radius-md); }
 .atl-board-list .atl-newcat-btn { flex-direction: row; gap: var(--space-2); padding: var(--space-1); }

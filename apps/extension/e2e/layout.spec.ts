@@ -232,6 +232,8 @@ test('list view packs compact categories into columns and only scrolls down', as
   await page.goto(`chrome-extension://${extensionId}/src/newtab/index.html`);
   await page.getByRole('button', { name: 'Show as list' }).click();
   await expect(page.locator('.atl-board')).toHaveClass(/atl-board-list/);
+  // Site icons keep the board's size in the list.
+  expect(await page.locator('.atl-fav').first().evaluate((e) => e.getBoundingClientRect().width), 'list icon size').toBe(32);
   const measure = () => page.evaluate(() => {
     const doc = document.documentElement;
     const board = document.querySelector('.atl-board')!;
