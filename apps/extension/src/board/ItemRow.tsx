@@ -61,7 +61,7 @@ export function ItemRow({ item }: { item: Item }) {
           >
             {item.title}
           </span>
-          <span className="atl-item-domain">{domain}</span>
+          <span className="atl-item-domain" title={domain}>{domain}</span>
         </span>
         {item.restored && <Tag tone="ochre">Restored</Tag>}
       </a>

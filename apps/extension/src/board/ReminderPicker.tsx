@@ -4,6 +4,7 @@ import { clearReminder, setReminder } from '../data/repo';
 import { Button } from '../ui/components/Button';
 import { Field } from '../ui/components/Field';
 import { IconButton } from '../ui/components/IconButton';
+import { useFitInView } from '../ui/components/useFitInView';
 import { useRun } from './Notice';
 import { reminderPresets, toLocalInput } from './reminderTime';
 
@@ -25,6 +26,8 @@ export function ReminderPicker({
   const [error, setError] = useState<string>();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
+  useFitInView(pop, open);
 
   useEffect(() => {
     if (!open) return;
@@ -79,7 +82,7 @@ export function ReminderPicker({
         onClick={() => { setCustom(toLocalInput(now())); setError(undefined); setOpen((o) => !o); }}
       />
       {open && (
-        <div role="dialog" aria-label="Reminder" className="im-menu-list atl-reminder-pop">
+        <div ref={pop} role="dialog" aria-label="Reminder" className="im-menu-list atl-reminder-pop">
           {reminderPresets(now()).map((p) => (
             <button key={p.label} type="button" className="im-menu-item" onClick={() => void choose(p.at)}>
               {p.label}

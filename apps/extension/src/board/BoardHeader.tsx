@@ -37,7 +37,7 @@ export function BoardHeader({
     <header className="atl-header">
       <div className="atl-header-title">
         <p className="im-eyebrow">Workspace · {saved} saved</p>
-        <h1>{workspace.name}</h1>
+        <h1 title={workspace.name}>{workspace.name}</h1>
         {role === 'viewer' && <Tag>View only</Tag>}
       </div>
       <div className="atl-header-slots">

@@ -156,6 +156,18 @@ function placementOf(active: Active, over: Over, axis: 'x' | 'y'): Placement {
   return centre < over.rect[pos] + over.rect[size] / 2 ? 'before' : 'after';
 }
 
+/**
+ * Columns wrap onto rows, so a column drop follows the sortable preview (rectSortingStrategy moves
+ * the dragged column into the target's slot): after the target when moving forward, else before it.
+ */
+function categoryPlacement(active: Active, over: Over): Placement {
+  const index = (d: unknown) => (d as { sortable?: { index?: number } } | undefined)?.sortable?.index;
+  const a = index(active.data.current);
+  const o = index(over.data.current);
+  if (a === undefined || o === undefined) return placementOf(active, over, 'x');
+  return a < o ? 'after' : 'before';
+}
+
 const titleOf = (e: { data: { current?: unknown } }) => (e.data.current as DragData | undefined)?.title ?? 'item';
 /** Name of the place an item would land: the category for items and columns, the workspace for sidebar rows. */
 const overTitle = (over: Over | null) => {
@@ -188,7 +200,7 @@ export function BoardDnd({ children }: { children: ReactNode }) {
     const drop: DropEnd = {
       active: { type: a.type, id: String(e.active.id), tab: a.tab },
       over: { type: o.type, id: o.type === 'newcat' ? (o.workspaceId ?? '') : String(e.over.id) },
-      placement: placementOf(e.active, e.over, a.type === 'category' ? 'x' : 'y'),
+      placement: a.type === 'category' ? categoryPlacement(e.active, e.over) : placementOf(e.active, e.over, 'y'),
     };
     void run(applyDrop(db, drop).then((msg) => { if (msg) notify(msg); }));
   };

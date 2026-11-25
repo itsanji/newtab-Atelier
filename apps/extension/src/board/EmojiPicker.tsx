@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Icon } from '../ui/components/Icon';
+import { useFitInView } from '../ui/components/useFitInView';
 
 const COLS = 8;
 
@@ -21,6 +22,7 @@ export function EmojiPicker({ value, onChange, labelledBy }: { value: string | n
   const pop = useRef<HTMLDivElement>(null);
   const grid = useRef<HTMLDivElement>(null);
   const id = useId();
+  useFitInView(pop, open);
 
   const cells = () => Array.from(grid.current?.querySelectorAll<HTMLButtonElement>('button') ?? []);
 

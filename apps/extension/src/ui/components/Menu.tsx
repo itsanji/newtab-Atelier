@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useFitInView } from './useFitInView';
 
 export type MenuItem = { label: string; onSelect(): void; danger?: boolean; disabled?: boolean; hint?: string };
 
@@ -10,6 +11,7 @@ export function Menu({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const listId = useId();
+  useFitInView(list, open);
 
   const enabled = () => Array.from(list.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? []);
 

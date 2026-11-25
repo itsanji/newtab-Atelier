@@ -51,7 +51,7 @@ export function TodoItem({ item }: { item: Item }) {
             disabled={!canEdit}
             onChange={(e) => void run(updateItem(db, item.id, { done: e.target.checked }))}
           />
-          <span className={item.done ? 'atl-todo-done' : undefined}>{item.title}</span>
+          <span className={item.done ? 'atl-todo-text atl-todo-done' : 'atl-todo-text'}>{item.title}</span>
           {item.restored && <Tag tone="ochre">Restored</Tag>}
           {reminder && !item.done && reminder.remindedAt === null && (
             <Tag tone={Date.parse(reminder.remindAt) <= Date.now() ? 'rose' : 'ochre'}>

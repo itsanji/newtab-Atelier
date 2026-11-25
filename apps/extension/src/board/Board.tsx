@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Workspace } from '@atelier/core';
 import { useDb } from '../data/DbContext';
@@ -22,8 +22,8 @@ export function Board({ workspace }: { workspace: Workspace }) {
   const drop = useNewCategoryDrop(workspace.id, !canEdit);
 
   return (
-    <div className="atl-board">
-      <SortableContext items={categories.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
+    <div className="atl-board" data-popover-bounds>
+      <SortableContext items={categories.map((c) => c.id)} strategy={rectSortingStrategy}>
         {categories.map((c) => <CategoryColumn key={c.id} category={c} onOpenAll={() => void run(openAll(db, c.id))} />)}
       </SortableContext>
       <div ref={drop.setNodeRef} className={drop.isOver ? 'atl-newcat atl-newcat-over' : 'atl-newcat'}>

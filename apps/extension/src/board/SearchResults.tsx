@@ -38,8 +38,8 @@ export function SearchResults({
               <button type="button" className="atl-link atl-result" onClick={() => onPick(hit)}>
                 <Tile hit={hit} url={urls.get(hit.itemId)} />
                 <span className="atl-item-text">
-                  <span className="atl-item-title">{hit.title || (hit.kind === 'note' ? 'Untitled note' : 'Untitled')}</span>
-                  <span className="atl-item-domain">{hit.workspaceName} · {hit.categoryName}</span>
+                  <span className="atl-item-title" title={hit.title || undefined}>{hit.title || (hit.kind === 'note' ? 'Untitled note' : 'Untitled')}</span>
+                  <span className="atl-item-domain" title={`${hit.workspaceName} · ${hit.categoryName}`}>{hit.workspaceName} · {hit.categoryName}</span>
                 </span>
               </button>
             </li>

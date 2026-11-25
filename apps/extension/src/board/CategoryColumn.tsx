@@ -113,7 +113,7 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
           />
         ) : (
           <h2 className="atl-column-title">
-            <button type="button" className="atl-title-btn" onClick={startRename} disabled={!canEdit} title={canEdit ? undefined : VIEW_ONLY}>{category.name}</button>
+            <button type="button" className="atl-title-btn" onClick={startRename} disabled={!canEdit} title={canEdit ? category.name : VIEW_ONLY}>{category.name}</button>
           </h2>
         )}
         {category.tabGroup ? <Tag tone="lily">Tab group · {items.length}</Tag> : <Tag>{items.length}</Tag>}

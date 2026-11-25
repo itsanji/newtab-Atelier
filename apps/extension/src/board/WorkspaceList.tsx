@@ -30,7 +30,7 @@ function WorkspaceRow({
   return (
     <div ref={drop.setNodeRef} className={['atl-ws', selected && 'atl-ws-active', drop.isOver && 'atl-ws-over'].filter(Boolean).join(' ')}>
       <button type="button" className="atl-ws-btn" aria-current={selected ? 'page' : undefined} onClick={onSelect}>
-        <span>{ws.emoji && <span aria-hidden="true">{ws.emoji} </span>}{ws.name}</span>
+        <span className="atl-ws-name" title={ws.name}>{ws.emoji && <span aria-hidden="true">{ws.emoji} </span>}{ws.name}</span>
         <span className="atl-ws-count">{count}</span>
       </button>
       {role !== 'viewer' && (

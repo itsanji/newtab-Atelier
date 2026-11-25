@@ -132,7 +132,7 @@ function PopupBody({ initial }: { initial: Loaded }) {
         <div className="atl-popup-tab">
           {tab.url && <img src={faviconUrl(tab.url)} alt="" />}
           <span className="atl-popup-tab-text">
-            <span className="atl-popup-title">{tab.title || tab.url}</span>
+            <span className="atl-popup-title" title={tab.title || tab.url}>{tab.title || tab.url}</span>
             <span className="atl-popup-url">{hostPath(tab.url ?? '')}</span>
           </span>
         </div>
@@ -143,7 +143,7 @@ function PopupBody({ initial }: { initial: Loaded }) {
         <div role="radiogroup" aria-label="Category" className="atl-chips">
           {categories.map((c) => (
             <button
-              key={c.id} type="button" role="radio" className="atl-chip"
+              key={c.id} type="button" role="radio" className="atl-chip" title={c.name}
               aria-checked={c.id === selectedId} onClick={() => setSelectedId(c.id)}
             >
               {c.name}

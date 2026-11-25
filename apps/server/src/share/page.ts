@@ -60,7 +60,7 @@ const CSS = `
 @font-face{font-family:Jost;font-weight:500;font-style:normal;font-display:swap;src:url(/static/fonts/jost-latin-500-normal.woff2) format("woff2")}
 :root{--canvas:#f6f1e7;--canvas-raised:#fbf8f2;--canvas-sunk:#ece5d6;--line:#ddd3c1;--line-strong:#8f8878;--ink:#2a2f3d;--ink-muted:#5d6170;--lily:#46568a;--lily-soft:#dfe3f0;--sage:#4d6a4a;--sage-soft:#dfe8d9;--shadow-soft:0 1px 2px rgba(42,47,61,.06),0 6px 20px rgba(42,47,61,.06);--font-serif:"Cormorant Garamond","Cormorant",Garamond,"Times New Roman",serif;--font-sans:Jost,"Futura","Avenir Next",system-ui,sans-serif;--radius-md:10px;--radius-lg:20px}
 *{box-sizing:border-box}
-body{margin:0;background:var(--canvas);color:var(--ink);font-family:var(--font-sans);font-size:16px;line-height:1.55}
+body{margin:0;background:var(--canvas);color:var(--ink);font-family:var(--font-sans);font-size:16px;line-height:1.55;overflow-wrap:anywhere}
 main{max-width:640px;margin:0 auto;padding:48px 16px 24px}
 h1{font-family:var(--font-serif);font-weight:500;font-size:2.6rem;line-height:1.1;margin:0 0 32px;overflow-wrap:anywhere}
 h1 .emoji{margin-right:.35em}
@@ -73,6 +73,7 @@ a:focus-visible{outline:2px solid var(--lily);outline-offset:2px;border-radius:4
 .item-title{font-family:var(--font-serif);font-weight:500;font-size:1.35rem;margin:0 0 4px}
 p{margin:4px 0 0;white-space:pre-wrap}
 .todo{display:flex;gap:12px;align-items:baseline}
+.todo .text{min-width:0}
 .mark{flex:none;width:1.2em;color:var(--lily)}
 .todo.done .text{color:var(--ink-muted);text-decoration:line-through}
 .empty{color:var(--ink-muted)}

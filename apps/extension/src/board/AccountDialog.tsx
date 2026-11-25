@@ -36,7 +36,7 @@ export function AccountEntry() {
     <>
       <button type="button" className="im-btn im-btn-ghost atl-account" onClick={() => setOpen('normal')}>
         <Icon name="user" size={18} />
-        <span className="atl-account-label">{account ? account.displayName || account.email : 'Connect a server'}</span>
+        <span className="atl-account-label" title={account ? account.displayName || account.email : undefined}>{account ? account.displayName || account.email : 'Connect a server'}</span>
       </button>
       {/* Keyed, so the open-account event restarts an already open dialog in sign-in-again mode. */}
       {open && <AccountDialog key={open} reauth={open === 'reauth'} onClose={() => setOpen(null)} />}

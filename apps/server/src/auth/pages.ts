@@ -3,7 +3,7 @@ import { escapeHtml } from '../share/page';
 const CSS = `
 :root{--canvas:#f6f1e7;--canvas-raised:#fbf8f2;--line:#ddd3c1;--ink:#2a2f3d;--ink-muted:#5d6170;--lily:#46568a;--shadow-soft:0 1px 2px rgba(42,47,61,.06),0 6px 20px rgba(42,47,61,.06);--font-serif:"Cormorant Garamond","Cormorant",Garamond,"Times New Roman",serif;--font-sans:Jost,"Futura","Avenir Next",system-ui,sans-serif}
 *{box-sizing:border-box}
-body{margin:0;background:var(--canvas);color:var(--ink);font-family:var(--font-sans);font-size:16px;line-height:1.55}
+body{margin:0;background:var(--canvas);color:var(--ink);font-family:var(--font-sans);font-size:16px;line-height:1.55;overflow-wrap:anywhere}
 main{max-width:420px;margin:0 auto;padding:72px 16px}
 h1{font-family:var(--font-serif);font-weight:500;font-size:2.4rem;line-height:1.1;margin:0 0 16px}
 p{margin:0 0 24px;color:var(--ink-muted)}
