@@ -1,5 +1,7 @@
 # Atelier
 
+![The Atelier board: categories side by side, with folders of site icons, reading links, to-dos and a note](docs/images/board.png)
+
 Atelier is a browser extension that turns the new tab page into a board of links, notes and to-dos, grouped by workspace and category. Save tabs from the toolbar popup, the context menu or the open tabs panel, drag items between categories, set reminders and search everything on the board. It works with no server and no account, and keeps everything in local storage.
 
 ## Requirements
