@@ -1,0 +1,24 @@
+{
+  "name": "atelier",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "overrides": {
+    "vite": "^7.3.8"
+  },
+  "scripts": {
+    "test": "vitest run && bun run --filter @atelier/server test",
+    "build": "bun run --filter '*' build",
+    "e2e": "bun run build:e2e && bun run --filter @atelier/extension e2e",
+    "db:test:up": "docker compose -f apps/server/test/compose.yml up -d --wait",
+    "build:e2e": "ATELIER_E2E=1 bun run --filter @atelier/extension build"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vite": "^7.3.8",
+    "vitest": "^3.2.4"
+  }
+}

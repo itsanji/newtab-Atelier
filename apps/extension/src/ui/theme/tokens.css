@@ -1,0 +1,30 @@
+/* Impression — CSS variables from tokens.json (Giverny default, .nocturne for dark) */
+:root, .giverny {
+  --canvas: #f6f1e7; --canvas-raised: #fbf8f2; --canvas-sunk: #ece5d6;
+  --line: #ddd3c1; --line-strong: #8f8878;
+  --ink: #2a2f3d; --ink-muted: #5d6170;
+  --lily: #46568a; --lily-soft: #dfe3f0; --on-lily: #fbf8f2;
+  --sage: #4d6a4a; --sage-soft: #dfe8d9;
+  --rose: #9a4652; --rose-soft: #f3dfdc;
+  --ochre: #c9963e; --ochre-ink: #80591a; --ochre-soft: #f3e6c8;
+  --link: var(--lily); --focus: var(--lily);
+  --shadow-soft: 0 1px 2px rgba(42,47,61,0.06), 0 6px 20px rgba(42,47,61,0.06);
+  --shadow-lift: 0 2px 6px rgba(42,47,61,0.08), 0 18px 48px rgba(70,86,138,0.14);
+  --font-serif: "Cormorant Garamond", "Cormorant", Garamond, "Times New Roman", serif;
+  --font-sans: Jost, "Futura", "Avenir Next", system-ui, sans-serif;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 72px;
+  --radius-sm: 4px; --radius-md: 10px; --radius-lg: 20px; --radius-pill: 999px;
+  --duration-quick: 160ms; --duration-calm: 420ms; --duration-dissolve: 1200ms;
+}
+.nocturne {
+  --canvas: #1c2030; --canvas-raised: #252a3c; --canvas-sunk: #161927;
+  --line: #363c52; --line-strong: #7d8399;
+  --ink: #efe8da; --ink-muted: #aeb0bd;
+  --lily: #a9b6e6; --lily-soft: #2f3756; --on-lily: #1c2030;
+  --sage: #a8c39e; --sage-soft: #2a3a2c;
+  --rose: #e7a7ab; --rose-soft: #4a2c33;
+  --ochre: #e3b867; --ochre-ink: #e3b867; --ochre-soft: #3f3420;
+  --shadow-soft: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.25);
+  --shadow-lift: 0 2px 6px rgba(0,0,0,0.35), 0 18px 48px rgba(0,0,0,0.4);
+}
