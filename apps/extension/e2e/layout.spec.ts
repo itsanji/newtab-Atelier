@@ -225,6 +225,41 @@ test('long content never makes the page scroll sideways', async () => {
   await page.close();
 });
 
+test('list view packs compact categories into columns and only scrolls down', async () => {
+  // Runs after the long-content test, so the long titles, the long category and the extra columns are there.
+  const page = await context.newPage();
+  await page.setViewportSize({ width: 1500, height: 900 });
+  await page.goto(`chrome-extension://${extensionId}/src/newtab/index.html`);
+  await page.getByRole('button', { name: 'Show as list' }).click();
+  await expect(page.locator('.atl-board')).toHaveClass(/atl-board-list/);
+  const measure = () => page.evaluate(() => {
+    const doc = document.documentElement;
+    const board = document.querySelector('.atl-board')!;
+    const cols = Array.from(document.querySelectorAll('.atl-column')).map((c) => c.getBoundingClientRect());
+    return {
+      page: doc.scrollWidth - doc.clientWidth,
+      board: board.scrollWidth - board.clientWidth,
+      widest: Math.max(...cols.map((r) => r.width)),
+      lanes: new Set(cols.map((r) => Math.round(r.left))).size,
+      inside: cols.every((r) => r.right <= board.getBoundingClientRect().right + 1),
+    };
+  });
+  // The long-content category is taller than the rest together, so balanced columns use two lanes, not three.
+  for (const [width, lanes] of [[1500, 2], [1024, 2], [800, 1], [400, 1]] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    const m = await measure();
+    expect(m.page, `${width}px: page scrolls sideways`).toBeLessThanOrEqual(0);
+    expect(m.board, `${width}px: list scrolls sideways`).toBeLessThanOrEqual(0);
+    expect(m.widest, `${width}px: a category is wider than 420px`).toBeLessThanOrEqual(421);
+    expect(m.inside, `${width}px: a category spills out`).toBe(true);
+    expect(m.lanes, `${width}px: number of columns`).toBeGreaterThanOrEqual(lanes);
+    if (width <= 800) expect(m.lanes, `${width}px: one column`).toBe(1);
+  }
+  // Back to columns for the tests that follow.
+  await page.getByRole('button', { name: 'Show as columns' }).click();
+  await page.close();
+});
+
 test('the popup keeps long category names inside its width', async () => {
   const popup = await context.newPage();
   await popup.setViewportSize({ width: 380, height: 700 });

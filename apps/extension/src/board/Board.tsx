@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { BoardView } from '../data/boardView';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Workspace } from '@atelier/core';
@@ -13,7 +14,7 @@ import { CategoryColumn } from './CategoryColumn';
 import { useNewCategoryDrop } from './dnd';
 import { useCanEdit, VIEW_ONLY } from './useRole';
 
-export function Board({ workspace }: { workspace: Workspace }) {
+export function Board({ workspace, view = 'columns' }: { workspace: Workspace; view?: BoardView }) {
   const db = useDb();
   const run = useRun();
   const categories = useLiveQuery(() => liveCategories(db, workspace.id), [db, workspace.id]) ?? [];
@@ -22,7 +23,7 @@ export function Board({ workspace }: { workspace: Workspace }) {
   const drop = useNewCategoryDrop(workspace.id, !canEdit);
 
   return (
-    <div className="atl-board" data-popover-bounds>
+    <div className={view === 'list' ? 'atl-board atl-board-list' : 'atl-board'} data-popover-bounds>
       <SortableContext items={categories.map((c) => c.id)} strategy={rectSortingStrategy}>
         {categories.map((c) => <CategoryColumn key={c.id} category={c} onOpenAll={() => void run(openAll(db, c.id))} />)}
       </SortableContext>

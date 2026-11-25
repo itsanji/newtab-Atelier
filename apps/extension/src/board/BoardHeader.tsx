@@ -9,12 +9,17 @@ import { IconButton } from '../ui/components/IconButton';
 import type { ThemePref, ResolvedTheme } from '../data/settings';
 import { Field } from '../ui/components/Field';
 import { useSavedCount } from './useSavedCount';
+import type { BoardView } from '../data/boardView';
 
 const SEARCH_ID = 'atl-search-input';
 
 export function BoardHeader({
-  workspace, query, onQueryChange, theme,
-}: { workspace: Workspace; query: string; onQueryChange(q: string): void; theme: { pref: ThemePref; resolved: ResolvedTheme; cycle(): unknown } }) {
+  workspace, query, onQueryChange, theme, view, onViewChange,
+}: {
+  workspace: Workspace; query: string; onQueryChange(q: string): void;
+  theme: { pref: ThemePref; resolved: ResolvedTheme; cycle(): unknown };
+  view: BoardView; onViewChange(view: BoardView): void;
+}) {
   const saved = useSavedCount(workspace.id);
   const account = useAccount();
   const role = useCurrentRole();
@@ -54,6 +59,12 @@ export function BoardHeader({
             onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); onQueryChange(''); } }}
           />
         </div>
+        {/* The icon shows the view you switch to. */}
+        <IconButton
+          label={view === 'list' ? 'Show as columns' : 'Show as list'}
+          icon={view === 'list' ? 'columns' : 'list'}
+          onClick={() => onViewChange(view === 'list' ? 'columns' : 'list')}
+        />
         <IconButton label={`Theme: ${themeName}`} icon={themeIcon} onClick={() => void cycle()} />
         {account && (
           <div data-slot="share">

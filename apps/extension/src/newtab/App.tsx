@@ -1,3 +1,4 @@
+import { useBoardView } from '../data/boardView';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { AtelierDB } from '../data/db';
@@ -32,6 +33,7 @@ function Shell({ db }: { db: AtelierDB }) {
   const highlight = useHighlightItem();
   useRecoveredNotice();
   const [query, setQuery] = useState('');
+  const [view, setView] = useBoardView();
   const trimmed = query.trim();
   // Rows are read and indexed only while there is something to search for.
   const searching = trimmed !== '';
@@ -70,7 +72,7 @@ function Shell({ db }: { db: AtelierDB }) {
       <Sidebar workspaces={workspaces} selectedId={selected.id} onSelect={(id) => void run(setMeta(db, SELECTED_KEY, id))} />
       <RoleProvider workspaceId={selected.id}>
       <main className="atl-main">
-        <BoardHeader workspace={selected} query={query} onQueryChange={setQuery} theme={theme} />
+        <BoardHeader workspace={selected} query={query} onQueryChange={setQuery} theme={theme} view={view} onViewChange={setView} />
         {trimmed ? (
           // Until the index is ready there is nothing to show, rather than a false "no results".
           index && <SearchResults
@@ -83,7 +85,7 @@ function Shell({ db }: { db: AtelierDB }) {
             }}
           />
         ) : (
-          <Board key={selected.id} workspace={selected} />
+          <Board key={selected.id} workspace={selected} view={view} />
         )}
       </main>
       </RoleProvider>
