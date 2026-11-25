@@ -27,7 +27,7 @@ a { color: var(--lily); }
 
 /* Columns sit side by side in one row and the board scrolls sideways; each column scrolls its own items. */
 .atl-board { display: flex; flex-wrap: nowrap; gap: var(--space-5); align-items: flex-start; min-width: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; padding: var(--space-1) var(--space-1) var(--space-4); }
-.atl-column { flex: 0 0 var(--atl-col-width, 300px); width: var(--atl-col-width, 300px); min-width: 0; max-height: 75vh; box-sizing: border-box; background: var(--canvas-raised); border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); padding: 20px var(--space-4) var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); }
+.atl-column { flex: 0 0 min(var(--atl-col-width, 300px), 100%); width: min(var(--atl-col-width, 300px), 100%); min-width: 0; max-height: 75vh; box-sizing: border-box; background: var(--canvas-raised); border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); padding: 20px var(--space-4) var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); }
 .atl-column-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: var(--space-1); margin: 0 calc(-1 * var(--space-2)); padding: 2px var(--space-2); }
 .atl-column-head, .atl-column-foot { flex: none; }
 /* Quiet scrollbars in the theme's colours, light or dark. */
@@ -267,7 +267,7 @@ a { color: var(--lily); }
    Board.tsx places each category in the shortest of as many fixed-width lanes as fit (absolute positions);
    until it has measured (or where it can't), they simply wrap. Only the page scrolls, downward. */
 .atl-board.atl-board-list { display: flex; flex-wrap: wrap; align-content: flex-start; gap: var(--space-5); overflow: visible; padding: 0; min-height: 0; position: relative; }
-.atl-board-list > .atl-column, .atl-board-list > .atl-newcat { flex: none; width: var(--atl-col-width, 300px); max-height: none; }
+.atl-board-list > .atl-column, .atl-board-list > .atl-newcat { flex: none; width: min(var(--atl-col-width, 300px), 100%); max-height: none; }
 .atl-board-list .atl-column-body { overflow: visible; }
 /* The New category tile becomes a small block at the end. */
 .atl-board-list .atl-newcat { min-height: 0; padding: var(--space-3); }
@@ -280,3 +280,9 @@ a { color: var(--lily); }
 .atl-size-btn:hover { color: var(--ink); background: var(--canvas-sunk); }
 .atl-size-btn[aria-pressed='true'] { background: var(--lily-soft); color: var(--lily); }
 .atl-size-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.atl-size-wrap { position: relative; }
+.atl-size-btn svg { display: block; margin: auto; }
+/* The custom width slider opens just below the switch. */
+.atl-size-pop { position: absolute; left: 0; top: calc(100% + var(--space-2)); z-index: 40; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--canvas-raised); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-lift); }
+.atl-size-pop input[type='range'] { width: min(220px, 50vw); accent-color: var(--lily); }
+.atl-size-value { min-width: 4.5em; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink-muted); }

@@ -231,6 +231,8 @@ test('list view: same look as the board, as many fixed-width lanes as fit, only 
   await page.setViewportSize({ width: 1500, height: 900 });
   await page.goto(`chrome-extension://${extensionId}/src/newtab/index.html`);
   await expect(page.locator('.atl-column').first()).toBeVisible();
+  // Items load after the columns: wait for a link before measuring one.
+  await expect(page.locator('.atl-fav').first()).toBeVisible();
   const look = () => page.evaluate(() => {
     const col = document.querySelector('.atl-column')!;
     const cs = getComputedStyle(col);
@@ -277,6 +279,27 @@ test('list view: same look as the board, as many fixed-width lanes as fit, only 
     await expect.poll(async () => (await measure()).widths).toEqual([px]);
     expect((await measure()).overlap).toBe(false);
   }
+  // Custom: the gear opens a slider from S (260px) to the board's width.
+  await sizes.getByRole('button', { name: 'Custom' }).click();
+  const slider = page.getByRole('slider', { name: 'Category width' });
+  await slider.focus();
+  await page.keyboard.press('End');
+  const full = await page.locator('.atl-board').evaluate((b) => b.clientWidth);
+  await expect.poll(async () => (await measure()).widths).toEqual([full]);
+  expect((await measure()).lanes, 'one category fills the board').toBe(1);
+  await page.keyboard.press('Home');
+  await expect.poll(async () => (await measure()).widths).toEqual([260]);
+  // On a narrow window the slider stays on screen and the page still doesn't scroll sideways.
+  await page.setViewportSize({ width: 400, height: 900 });
+  const pop = await page.locator('.atl-size-pop').boundingBox();
+  expect(pop!.x, 'slider starts off screen').toBeGreaterThanOrEqual(0);
+  expect(pop!.x + pop!.width, 'slider runs off screen').toBeLessThanOrEqual(400);
+  expect((await measure()).page).toBeLessThanOrEqual(0);
+  await page.keyboard.press('Escape');
+  await expect(slider).toHaveCount(0);
+  await page.setViewportSize({ width: 1500, height: 900 });
+  await sizes.getByRole('button', { name: 'Medium' }).click();
+
   await page.getByRole('button', { name: 'Show as columns' }).click();
   await sizes.getByRole('button', { name: 'Large' }).click();
   expect(await page.locator('.atl-column').first().evaluate((c) => c.getBoundingClientRect().width)).toBe(380);

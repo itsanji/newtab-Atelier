@@ -1,4 +1,4 @@
-import { useBoardView, useCategorySize } from '../data/boardView';
+import { CATEGORY_WIDTH, useBoardView, useCategorySize, useCustomCategoryWidth } from '../data/boardView';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { AtelierDB } from '../data/db';
@@ -35,6 +35,8 @@ function Shell({ db }: { db: AtelierDB }) {
   const [query, setQuery] = useState('');
   const [view, setView] = useBoardView();
   const [size, setSize] = useCategorySize();
+  const [customWidth, setCustomWidth] = useCustomCategoryWidth();
+  const categoryWidth = size === 'custom' ? customWidth : CATEGORY_WIDTH[size];
   const trimmed = query.trim();
   // Rows are read and indexed only while there is something to search for.
   const searching = trimmed !== '';
@@ -73,7 +75,7 @@ function Shell({ db }: { db: AtelierDB }) {
       <Sidebar workspaces={workspaces} selectedId={selected.id} onSelect={(id) => void run(setMeta(db, SELECTED_KEY, id))} />
       <RoleProvider workspaceId={selected.id}>
       <main className="atl-main">
-        <BoardHeader workspace={selected} query={query} onQueryChange={setQuery} theme={theme} view={view} onViewChange={setView} size={size} onSizeChange={setSize} />
+        <BoardHeader workspace={selected} query={query} onQueryChange={setQuery} theme={theme} view={view} onViewChange={setView} size={size} onSizeChange={setSize} customWidth={customWidth} onCustomWidthChange={setCustomWidth} />
         {trimmed ? (
           // Until the index is ready there is nothing to show, rather than a false "no results".
           index && <SearchResults
@@ -86,7 +88,7 @@ function Shell({ db }: { db: AtelierDB }) {
             }}
           />
         ) : (
-          <Board key={selected.id} workspace={selected} view={view} size={size} />
+          <Board key={selected.id} workspace={selected} view={view} width={categoryWidth} />
         )}
       </main>
       </RoleProvider>

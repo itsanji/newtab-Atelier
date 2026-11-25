@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../newtab/App';
 import { openDb, type AtelierDB } from '../data/db';
@@ -52,5 +52,34 @@ describe('list view', () => {
     expect(width()).toBe('380px');
     await user.click(within(screen.getByRole('group', { name: 'Category size' })).getByRole('button', { name: 'Small' }));
     expect(width()).toBe('260px');
+  });
+});
+
+describe('custom category size', () => {
+  test('the gear opens a slider from S to the board width; dragging it sets the width, and it is remembered', async () => {
+    const user = userEvent.setup();
+    const first = render(<App db={db} />);
+    await screen.findByRole('region', { name: 'Saved' });
+    const width = () => (document.querySelector('.atl-board') as HTMLElement).style.getPropertyValue('--atl-col-width');
+    const sizes = screen.getByRole('group', { name: 'Category size' });
+    await user.click(within(sizes).getByRole('button', { name: 'Custom' }));
+    expect(within(sizes).getByRole('button', { name: 'Custom' })).toHaveAttribute('aria-pressed', 'true');
+    const slider = screen.getByRole('slider', { name: 'Category width' });
+    expect(slider).toHaveAttribute('min', '260');
+    fireEvent.change(slider, { target: { value: '520' } });
+    expect(width()).toBe('520px');
+    expect(screen.getByText('520px')).toBeInTheDocument();
+    // Esc closes the slider; the custom width stays.
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('slider', { name: 'Category width' })).toBeNull();
+    expect(width()).toBe('520px');
+
+    first.unmount();
+    render(<App db={db} />);
+    await screen.findByRole('region', { name: 'Saved' });
+    expect(width()).toBe('520px');
+    // Picking a preset leaves custom.
+    await user.click(within(screen.getByRole('group', { name: 'Category size' })).getByRole('button', { name: 'Medium' }));
+    expect(width()).toBe('300px');
   });
 });

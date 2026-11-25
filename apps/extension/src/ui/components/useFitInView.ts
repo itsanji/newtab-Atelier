@@ -7,7 +7,8 @@ const MARGIN = 8;
  * dialog or `[data-popover-bounds]` element it sits in, instead of spilling past the right edge and
  * making the page scroll sideways.
  */
-export function useFitInView(ref: RefObject<HTMLElement | null>, open: boolean) {
+/** `refit` re-checks when it changes (for example the window width while the popover stays open). */
+export function useFitInView(ref: RefObject<HTMLElement | null>, open: boolean, refit?: unknown) {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!open || !el) return;
@@ -21,5 +22,5 @@ export function useFitInView(ref: RefObject<HTMLElement | null>, open: boolean) 
     if (r.right > right) shift = r.right - right;
     if (r.left - shift < left) shift = r.left - left;
     if (shift) el.style.left = `${el.offsetLeft - shift}px`;
-  }, [ref, open]);
+  }, [ref, open, refit]);
 }
