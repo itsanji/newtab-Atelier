@@ -54,18 +54,50 @@ const emptySummary = (): PushSummary => ({ pushed: 0, restored: 0, rejected: 0, 
 
 const getUnsyncable = async (db: AtelierDB) => (await getMeta<UnsyncableEntry[]>(db, UNSYNCABLE_KEY)) ?? [];
 
+/** The outbox key of the row's parent, if any (reminder → item → category → workspace). */
+function parentKey(e: OutboxEntry): string | undefined {
+  const row = e.row as { itemId?: string; categoryId?: string; workspaceId?: string };
+  if (e.table === 'reminders' && row.itemId) return outboxKey('items', row.itemId);
+  if (e.table === 'items' && row.categoryId) return outboxKey('categories', row.categoryId);
+  if (e.table === 'categories' && row.workspaceId) return outboxKey('workspaces', row.workspaceId);
+  return undefined;
+}
+
 /**
- * Outbox entries to push: all but versions already refused as too large. Also forgets refusals whose
- * entry is gone or was rewritten (a new version gets its own try).
+ * Hold back entries (sorted parents first) whose parent is held, adding them to `held`: a child of a
+ * row that can't sync would be rejected as missing its parent, and `recover` would drop it.
  */
-export async function pushableEntries(db: AtelierDB): Promise<OutboxEntry[]> {
-  return db.transaction('rw', db.outbox, db.meta, async () => {
-    const entries = await db.outbox.toArray();
-    const stuck = await getUnsyncable(db);
-    const live = stuck.filter((s) => entries.some((e) => e.key === s.key && e.seq === s.seq));
-    if (live.length !== stuck.length) await db.meta.put({ key: UNSYNCABLE_KEY, value: live });
-    return entries.filter((e) => !live.some((s) => s.key === e.key && s.seq === e.seq));
+function holdBack(entries: OutboxEntry[], held: Set<string>): OutboxEntry[] {
+  return entries.filter((e) => {
+    const parent = parentKey(e);
+    if (parent === undefined || !held.has(parent)) return true;
+    held.add(e.key);
+    return false;
   });
+}
+
+/**
+ * What to push, parents first: every outbox entry except versions already refused as too large and
+ * their descendants (which stay queued until the parent syncs). `held` is the keys left out. Also
+ * forgets refusals whose entry is gone or was rewritten (a new version gets its own try).
+ */
+async function pushPlan(db: AtelierDB): Promise<{ entries: OutboxEntry[]; held: Set<string> }> {
+  return db.transaction('rw', db.outbox, db.meta, async () => {
+    const all = await db.outbox.toArray();
+    const stuck = await getUnsyncable(db);
+    const live = stuck.filter((s) => all.some((e) => e.key === s.key && e.seq === s.seq));
+    if (live.length !== stuck.length) await db.meta.put({ key: UNSYNCABLE_KEY, value: live });
+    const held = new Set(live.map((s) => s.key));
+    const sorted = all
+      .filter((e) => !live.some((s) => s.key === e.key && s.seq === e.seq))
+      .sort((a, b) => RANK[a.table] - RANK[b.table] || a.seq - b.seq);
+    return { entries: holdBack(sorted, held), held };
+  });
+}
+
+/** Outbox entries the next push would send (see `pushPlan`). */
+export async function pushableEntries(db: AtelierDB): Promise<OutboxEntry[]> {
+  return (await pushPlan(db)).entries;
 }
 
 const utf8 = new TextEncoder();
@@ -126,17 +158,22 @@ export async function pushOutbox(
 
 /** `pushOutbox`, adding to `summary` as it goes (so a later chunk's failure keeps what earlier ones did). */
 async function pushInto(db: AtelierDB, api: SyncApi, userId: string, now: () => Iso, summary: PushSummary): Promise<void> {
-  const entries = (await pushableEntries(db)).sort((a, b) => RANK[a.table] - RANK[b.table] || a.seq - b.seq);
-  for (const chunk of chunkEntries(entries)) await pushChunk(db, api, chunk, userId, now, summary);
+  const { entries, held } = await pushPlan(db);
+  for (const chunk of chunkEntries(entries)) await pushChunk(db, api, chunk, userId, now, summary, held);
 }
 
 /**
  * Push one chunk. A 413 (body too large) splits it in half and retries each half; a single row that
- * still gets 413 is kept locally and in the outbox but marked unsyncable, so it no longer blocks pushes.
+ * still gets 413 is kept locally and in the outbox but marked unsyncable, so it no longer blocks pushes,
+ * and its descendants (`held`) stay queued.
  */
 async function pushChunk(
   db: AtelierDB, api: SyncApi, chunk: OutboxEntry[], userId: string, now: () => Iso, summary: PushSummary,
+  held: Set<string>,
 ): Promise<void> {
+  // A parent may have been found too large earlier in this round.
+  chunk = holdBack(chunk, held);
+  if (!chunk.length) return;
   let results: PushResult[];
   try {
     ({ results } = await api.push(chunk.map((e) => ({ table: e.table, row: e.row }))));
@@ -144,9 +181,12 @@ async function pushChunk(
     if (!(e instanceof ApiError) || e.status !== 413) throw e;
     if (chunk.length > 1) {
       const mid = Math.ceil(chunk.length / 2);
-      await pushChunk(db, api, chunk.slice(0, mid), userId, now, summary);
-      await pushChunk(db, api, chunk.slice(mid), userId, now, summary);
-    } else if (await markUnsyncable(db, chunk[0]!)) {
+      await pushChunk(db, api, chunk.slice(0, mid), userId, now, summary, held);
+      await pushChunk(db, api, chunk.slice(mid), userId, now, summary, held);
+      return;
+    }
+    held.add(chunk[0]!.key);
+    if (await markUnsyncable(db, chunk[0]!)) {
       summary.unsyncable.push(rowTitle(chunk[0]!));
     }
     return;

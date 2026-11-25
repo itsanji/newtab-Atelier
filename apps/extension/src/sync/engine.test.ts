@@ -460,6 +460,26 @@ describe('syncOnce', () => {
     expect(await takeUnsyncable(account.partition)).toEqual([]);
   });
 
+  test('a new oversized note keeps its reminder locally and queued, in this round and the next', async () => {
+    const { cat } = await setup();
+    const huge = await createItem(db, { categoryId: cat.id, kind: 'note', title: 'Huge note', note: 'z'.repeat(5000) });
+    const rem = await setReminder(db, huge.id, ts(9));
+    // The real server rejects a reminder whose item it doesn't have.
+    const { api, pushes } = sizeLimitedApi(4000, { decide: (c) => (c.table === 'reminders' ? 'rejected' : 'applied'), pull: (c) => emptyPull(c + 1) });
+    for (let round = 0; round < 2; round++) {
+      const r = await syncOnce(db, account, api);
+      expect(r).toMatchObject({ ok: true, rejected: 0 });
+      expect(await db.reminders.get(rem.id)).toBeDefined();
+      expect((await db.outbox.toArray()).map((e) => e.key).sort()).toEqual([outboxKey('items', huge.id), outboxKey('reminders', rem.id)].sort());
+    }
+    expect(pushes.flat().some((c) => c.table === 'reminders')).toBe(false);
+    // Once the note is small enough, both go up.
+    await updateItem(db, huge.id, { note: 'short now' });
+    const { api: ok } = fakeApi();
+    await syncOnce(db, account, ok);
+    expect(await db.outbox.count()).toBe(0);
+  });
+
   test('401 pauses sync', async () => {
     await setup();
     const before = await db.outbox.count();
