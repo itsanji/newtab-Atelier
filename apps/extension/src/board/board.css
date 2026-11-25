@@ -32,7 +32,7 @@ a { color: var(--lily); }
 .atl-column-head, .atl-column-foot { flex: none; }
 /* Quiet scrollbars in the theme's colours, light or dark. */
 .atl-column-body, .atl-sidebar, .atl-main { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
-/* The board's sideways scrollbar is hidden: it scrolls sideways with Shift+wheel or a trackpad swipe. */
+/* The board's sideways scrollbar is hidden: the browser scrolls it with Shift+wheel or a trackpad swipe. */
 .atl-board { scrollbar-width: none; }
 .atl-board::-webkit-scrollbar { display: none; }
 /* Wide windows: the page fits the window; the board fills the height under the header. */

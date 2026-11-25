@@ -199,7 +199,7 @@ test('long content never makes the page scroll sideways', async () => {
   }
   await page.waitForTimeout(300);
   expect(await board.evaluate((b) => b.scrollLeft), 'a plain wheel scrolled sideways').toBe(0);
-  // Shift+wheel does, even over a column.
+  // Shift+wheel does, even over a column: the browser does this itself.
   await page.mouse.move(spots.column.x, spots.column.y);
   await page.keyboard.down('Shift');
   await page.mouse.wheel(0, 400);
