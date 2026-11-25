@@ -9,16 +9,19 @@ import { IconButton } from '../ui/components/IconButton';
 import type { ThemePref, ResolvedTheme } from '../data/settings';
 import { Field } from '../ui/components/Field';
 import { useSavedCount } from './useSavedCount';
-import type { BoardView } from '../data/boardView';
+import type { BoardView, CategorySize } from '../data/boardView';
+
+const SIZE_NAMES: Record<CategorySize, string> = { s: 'Small', m: 'Medium', l: 'Large' };
 
 const SEARCH_ID = 'atl-search-input';
 
 export function BoardHeader({
-  workspace, query, onQueryChange, theme, view, onViewChange,
+  workspace, query, onQueryChange, theme, view, onViewChange, size, onSizeChange,
 }: {
   workspace: Workspace; query: string; onQueryChange(q: string): void;
   theme: { pref: ThemePref; resolved: ResolvedTheme; cycle(): unknown };
   view: BoardView; onViewChange(view: BoardView): void;
+  size: CategorySize; onSizeChange(size: CategorySize): void;
 }) {
   const saved = useSavedCount(workspace.id);
   const account = useAccount();
@@ -58,6 +61,21 @@ export function BoardHeader({
             onChange={(e) => onQueryChange(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); onQueryChange(''); } }}
           />
+        </div>
+        <div className="atl-size" role="group" aria-label="Category size">
+          {(['s', 'm', 'l'] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              className="atl-size-btn"
+              aria-pressed={size === s}
+              aria-label={SIZE_NAMES[s]}
+              title={`Category size: ${SIZE_NAMES[s]}`}
+              onClick={() => onSizeChange(s)}
+            >
+              {s.toUpperCase()}
+            </button>
+          ))}
         </div>
         {/* The icon shows the view you switch to. */}
         <IconButton

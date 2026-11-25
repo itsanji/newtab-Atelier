@@ -26,7 +26,8 @@ import { ItemRow } from './ItemRow';
 import { NoteItem } from './NoteItem';
 import { TodoItem } from './TodoItem';
 
-export function CategoryColumn({ category, onOpenAll }: { category: Category; onOpenAll?: () => void }) {
+/** `place` positions the column in the list view's masonry; the board's columns leave it out. */
+export function CategoryColumn({ category, onOpenAll, place }: { category: Category; onOpenAll?: () => void; place?: CSSProperties }) {
   const db = useDb();
   const run = useRun();
   const notify = useNotify();
@@ -35,7 +36,7 @@ export function CategoryColumn({ category, onOpenAll }: { category: Category; on
   const account = useAccount();
   const section = useRef<HTMLElement | null>(null);
   const sort = useSortable({ id: category.id, disabled: !canEdit, data: { type: 'category', title: category.name } });
-  const style: CSSProperties = { transform: CSS.Translate.toString(sort.transform), transition: sort.transition, opacity: sort.isDragging ? 0.4 : undefined };
+  const style: CSSProperties = { ...place, transform: CSS.Translate.toString(sort.transform), transition: sort.transition, opacity: sort.isDragging ? 0.4 : undefined };
   const all = useLiveQuery(() => liveItems(db, category.id), [db, category.id]) ?? [];
   const { top, inFolder } = arrangeItems(all);
   /** What the user saved here: folders hold items but don't count as one. */

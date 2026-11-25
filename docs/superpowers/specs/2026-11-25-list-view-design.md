@@ -26,3 +26,9 @@
 
 - No per-workspace view setting, no sync of the choice.
 - No change to the Columns view.
+
+## Revision (same day, after using it)
+
+- **Same look as Columns:** list view keeps the board's padding, spacing, row sizes and icons; only the layout differs.
+- **Category size S / M / L** (260 / 300 / 380 px), a header switch remembered per device, applied to both views; M is the old fixed 300px.
+- **As many columns as fit:** newspaper columns balance heights and leave lanes unused (4 categories on a wide screen used 2 lanes). Replaced by masonry: lanes = how many fixed-width categories fit; each category, in order, goes into the currently shortest lane (absolute positions, re-placed on resize or when a category's height changes, so nothing remounts and drag and drop keeps working).

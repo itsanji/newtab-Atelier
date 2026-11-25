@@ -1,32 +1,39 @@
 import { useCallback, useEffect, useState } from 'react';
 
-/** How the board lays out a workspace: side-by-side columns, or the packed, vertically scrolling list. */
+/** How the board lays out a workspace: side-by-side columns, or the masonry list that scrolls down. */
 export type BoardView = 'columns' | 'list';
-
-const KEY = 'atelier.boardView';
-
-function read(): BoardView {
-  try {
-    return localStorage.getItem(KEY) === 'list' ? 'list' : 'columns';
-  } catch {
-    return 'columns';
-  }
-}
+/** Fixed width of every category, in both views. */
+export type CategorySize = 's' | 'm' | 'l';
+export const CATEGORY_WIDTH: Record<CategorySize, number> = { s: 260, m: 300, l: 380 };
 
 /**
- * The board view, remembered on this device (not synced). Read synchronously so the first paint is
- * already right; other open new tabs follow along through the `storage` event.
+ * A layout choice remembered on this device (not synced). Read synchronously so the first paint is already
+ * right; other open new tabs follow along through the `storage` event.
  */
-export function useBoardView(): [BoardView, (view: BoardView) => void] {
-  const [view, setView] = useState<BoardView>(read);
+function useLocalChoice<T extends string>(key: string, allowed: readonly T[], fallback: T): [T, (next: T) => void] {
+  const read = useCallback((): T => {
+    try {
+      const v = localStorage.getItem(key);
+      return allowed.includes(v as T) ? (v as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  }, [key, allowed, fallback]);
+  const [value, setValue] = useState<T>(read);
   useEffect(() => {
-    const onStorage = (e: StorageEvent) => { if (e.key === KEY) setView(read()); };
+    const onStorage = (e: StorageEvent) => { if (e.key === key) setValue(read()); };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, []);
-  const set = useCallback((next: BoardView) => {
-    setView(next);
-    try { localStorage.setItem(KEY, next); } catch { /* storage blocked: this page still switches */ }
-  }, []);
-  return [view, set];
+  }, [key, read]);
+  const set = useCallback((next: T) => {
+    setValue(next);
+    try { localStorage.setItem(key, next); } catch { /* storage blocked: this page still switches */ }
+  }, [key]);
+  return [value, set];
 }
+
+const VIEWS = ['columns', 'list'] as const;
+const SIZES = ['s', 'm', 'l'] as const;
+
+export const useBoardView = () => useLocalChoice<BoardView>('atelier.boardView', VIEWS, 'columns');
+export const useCategorySize = () => useLocalChoice<CategorySize>('atelier.categorySize', SIZES, 'm');

@@ -225,40 +225,62 @@ test('long content never makes the page scroll sideways', async () => {
   await page.close();
 });
 
-test('list view packs compact categories into columns and only scrolls down', async () => {
+test('list view: same look as the board, as many fixed-width lanes as fit, only scrolls down', async () => {
   // Runs after the long-content test, so the long titles, the long category and the extra columns are there.
   const page = await context.newPage();
   await page.setViewportSize({ width: 1500, height: 900 });
   await page.goto(`chrome-extension://${extensionId}/src/newtab/index.html`);
+  await expect(page.locator('.atl-column').first()).toBeVisible();
+  const look = () => page.evaluate(() => {
+    const col = document.querySelector('.atl-column')!;
+    const cs = getComputedStyle(col);
+    return { padding: cs.padding, row: document.querySelector('.atl-item')!.getBoundingClientRect().height, icon: document.querySelector('.atl-fav')!.getBoundingClientRect().width };
+  });
+  const board = await look();
   await page.getByRole('button', { name: 'Show as list' }).click();
   await expect(page.locator('.atl-board')).toHaveClass(/atl-board-list/);
-  // Site icons keep the board's size in the list.
-  expect(await page.locator('.atl-fav').first().evaluate((e) => e.getBoundingClientRect().width), 'list icon size').toBe(32);
+  expect(await look(), 'list view looks like the board').toEqual(board);
+
   const measure = () => page.evaluate(() => {
     const doc = document.documentElement;
-    const board = document.querySelector('.atl-board')!;
-    const cols = Array.from(document.querySelectorAll('.atl-column')).map((c) => c.getBoundingClientRect());
+    const el = document.querySelector('.atl-board')!;
+    const box = el.getBoundingClientRect();
+    const tiles = Array.from(el.children).map((c) => c.getBoundingClientRect());
+    const overlap = tiles.some((a, i) => tiles.some((b, j) => i < j && a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1));
     return {
       page: doc.scrollWidth - doc.clientWidth,
-      board: board.scrollWidth - board.clientWidth,
-      widest: Math.max(...cols.map((r) => r.width)),
-      lanes: new Set(cols.map((r) => Math.round(r.left))).size,
-      inside: cols.every((r) => r.right <= board.getBoundingClientRect().right + 1),
+      board: el.scrollWidth - el.clientWidth,
+      widths: [...new Set(tiles.map((r) => Math.round(r.width)))],
+      lanes: new Set(tiles.map((r) => Math.round(r.left))).size,
+      fit: Math.max(1, Math.floor((box.width + 24) / (Math.min(300, box.width) + 24))),
+      count: tiles.length,
+      inside: tiles.every((r) => r.right <= box.right + 1 && r.left >= box.left - 1),
+      overlap,
     };
   });
-  // The long-content category is taller than the rest together, so balanced columns use two lanes, not three.
-  for (const [width, lanes] of [[1500, 2], [1024, 2], [800, 1], [400, 1]] as const) {
+  for (const width of [1500, 1024, 800, 400]) {
     await page.setViewportSize({ width, height: 900 });
+    await expect.poll(async () => (await measure()).lanes).toBe(Math.min((await measure()).fit, (await measure()).count));
     const m = await measure();
     expect(m.page, `${width}px: page scrolls sideways`).toBeLessThanOrEqual(0);
     expect(m.board, `${width}px: list scrolls sideways`).toBeLessThanOrEqual(0);
-    expect(m.widest, `${width}px: a category is wider than 420px`).toBeLessThanOrEqual(421);
     expect(m.inside, `${width}px: a category spills out`).toBe(true);
-    expect(m.lanes, `${width}px: number of columns`).toBeGreaterThanOrEqual(lanes);
-    if (width <= 800) expect(m.lanes, `${width}px: one column`).toBe(1);
+    expect(m.overlap, `${width}px: categories overlap`).toBe(false);
+    if (width > 400) expect(m.widths, `${width}px: every category is 300px`).toEqual([300]);
   }
-  // Back to columns for the tests that follow.
+
+  // Category size: every category takes the chosen width, in the list and on the board.
+  await page.setViewportSize({ width: 1500, height: 900 });
+  const sizes = page.getByRole('group', { name: 'Category size' });
+  for (const [name, px] of [['Large', 380], ['Small', 260], ['Medium', 300]] as const) {
+    await sizes.getByRole('button', { name }).click();
+    await expect.poll(async () => (await measure()).widths).toEqual([px]);
+    expect((await measure()).overlap).toBe(false);
+  }
   await page.getByRole('button', { name: 'Show as columns' }).click();
+  await sizes.getByRole('button', { name: 'Large' }).click();
+  expect(await page.locator('.atl-column').first().evaluate((c) => c.getBoundingClientRect().width)).toBe(380);
+  await sizes.getByRole('button', { name: 'Medium' }).click();
   await page.close();
 });
 
