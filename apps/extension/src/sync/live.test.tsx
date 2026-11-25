@@ -72,6 +72,17 @@ describe('useLiveSync', () => {
     expect(FakeSocket.all).toHaveLength(n + 1);
   });
 
+  test('a reconnect syncs once it is ready', () => {
+    renderHook(() => useLiveSync(acct));
+    FakeSocket.all[0]!.say({ type: 'ready' });
+    expect(syncNows(fake)).toBe(1);
+    FakeSocket.all[0]!.drop();
+    vi.advanceTimersByTime(1000);
+    FakeSocket.all[1]!.open();
+    FakeSocket.all[1]!.say({ type: 'ready' });
+    expect(syncNows(fake)).toBe(2);
+  });
+
   test('close code 4401 marks sync paused and does not reconnect', async () => {
     renderHook(() => useLiveSync(acct));
     FakeSocket.all[0]!.drop(4401);

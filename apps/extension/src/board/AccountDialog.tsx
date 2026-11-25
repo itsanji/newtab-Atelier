@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useAccount, type Account } from '../account/account';
+import type { Account } from '../account/account';
+import { useAccount } from '../account/useAccount';
 import { AccountSwitchError, finishSignIn, googleSignIn, GoogleSignInError, MagicLinkExpiredError, pollMagic, signOut } from '../account/signIn';
 import { useDb } from '../data/DbContext';
 import { ApiClient, ApiError, ensureHostPermission, InvalidServerUrl, normaliseServerUrl, OfflineError, type AuthResult, type ServerConfig } from '../sync/api';

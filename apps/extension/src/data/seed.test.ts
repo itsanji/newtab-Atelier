@@ -4,7 +4,7 @@ import { partitionFor, setAccount, setCurrentUserId, type Account } from '../acc
 import { CURSOR_KEY } from '../sync/engine';
 import { deleteDb, openDb, type AtelierDB } from './db';
 import { getMeta, liveWorkspaces } from './queries';
-import { awaitingFirstPull, ensureSeed } from './seed';
+import { awaitingFirstPull, ensureSeed, FIRST_PULL } from './seed';
 import { resolveTargetCategory } from './target';
 
 const SERVER = 'https://a.example';
@@ -57,6 +57,24 @@ describe('seeding a signed-in partition', () => {
     pull = 'offline';
     await ensureSeed(db);
     expect((await liveWorkspaces(db)).map((w) => w.name)).toEqual(['My workspace']);
+  });
+
+  test('a hung server delays seeding by at most FIRST_PULL.waitMs', async () => {
+    const wait = FIRST_PULL.waitMs;
+    FIRST_PULL.waitMs = 50;
+    let release = () => {};
+    vi.mocked(fetch).mockImplementation(() => new Promise<Response>((_, reject) => { release = () => reject(new TypeError('Failed to fetch')); }));
+    try {
+      const started = Date.now();
+      await ensureSeed(db);
+      expect(Date.now() - started).toBeLessThan(1000);
+      expect((await liveWorkspaces(db)).map((w) => w.name)).toEqual(['My workspace']);
+    } finally {
+      FIRST_PULL.waitMs = wait;
+      // Let the background round finish so it frees the partition's sync lock.
+      release();
+      await new Promise((r) => setTimeout(r, 20));
+    }
   });
 
   test('worker saves target the pulled category, not a new starter one', async () => {

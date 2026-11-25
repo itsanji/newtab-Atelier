@@ -1,6 +1,6 @@
 import type { Workspace } from '@atelier/core';
 import { useEffect, useState } from 'react';
-import { useAccount } from '../account/account';
+import { useAccount } from '../account/useAccount';
 import { Button } from '../ui/components/Button';
 import { Tag } from '../ui/components/Tag';
 import { ShareDialog } from './ShareDialog';

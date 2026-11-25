@@ -16,6 +16,9 @@ export async function syncActive(): Promise<void> {
     const account = await getAccount();
     if (!account) return;
     const db = await getActiveDb();
+    // The account may have changed between the two reads: never use one identity's token on another
+    // partition (the next trigger syncs the new one).
+    if (db.name !== `atelier-${account.partition}`) return;
     const result = await syncOnce(db, account, new ApiClient(account.serverUrl, account.token));
     if (result.remindersChanged) await syncAlarms(db);
   } catch (e) {

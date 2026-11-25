@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useAccount } from '../account/account';
+import { useAccount } from '../account/useAccount';
 import { getSyncStatus, STATUS_KEY, type SyncStatus as Status } from '../sync/status';
 
 /** Board code listens for this to open the account dialog. */

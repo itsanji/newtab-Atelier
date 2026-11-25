@@ -7,7 +7,7 @@ import { deleteDb, openDb } from '../data/db';
 import { ensureSeed } from '../data/seed';
 import { createCategory, createItem, createWorkspace, setReminder, updateCategory } from '../data/repo';
 import { liveCategories, liveWorkspaces } from '../data/queries';
-import { OfflineError, type AuthResult } from '../sync/api';
+import { ApiError, OfflineError, type AuthResult } from '../sync/api';
 
 const SERVER = 'https://a.example';
 const auth = (id = 'u1'): AuthResult => ({ token: `tok-${id}`, user: { id, email: `${id}@x.io`, displayName: `User ${id}` } });
@@ -272,6 +272,22 @@ describe('signOut', () => {
     const db = openDb(account.partition);
     expect(await db.items.get(lateId)).toMatchObject({ title: 'late' });
     expect(await db.outbox.count()).toBe(1);
+    db.close();
+  });
+
+  test('a row too large to sync counts as unsynced, so sign-out warns', async () => {
+    await localWithContent();
+    const account = await finishSignIn(api, auth('u1'));
+    const fake = okApi();
+    const ok = fake.push.getMockImplementation()!;
+    fake.push.mockImplementation(async (changes) => {
+      if (changes.some((c) => (c.row as { title?: string }).title === 'N')) throw new ApiError(413, 'Payload too large');
+      return ok(changes);
+    });
+    expect(await signOut(account, fake as never)).toBe('unsynced');
+    expect(await getAccount()).toEqual(account);
+    const db = openDb(account.partition);
+    expect((await db.outbox.toArray()).map((e) => (e.row as { title?: string }).title)).toEqual(['N']);
     db.close();
   });
 

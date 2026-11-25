@@ -6,6 +6,8 @@ import { getMeta } from './queries';
 import { createCategory, createWorkspace, tx } from './repo';
 
 const ACCOUNT_DB_PREFIX = 'atelier-acct-';
+/** How long a first open waits for the first pull before seeding anyway (a hung server must not blank the popup). */
+export const FIRST_PULL = { waitMs: 3000 };
 
 /**
  * True while a signed-in partition is empty and has never completed a pull: seeding now could add a
@@ -17,12 +19,19 @@ export async function awaitingFirstPull(db: AtelierDB): Promise<boolean> {
   return (await getMeta(db, CURSOR_KEY)) === undefined;
 }
 
-/** One sync round for `db` if it is the active account's partition (never throws). */
+/**
+ * One sync round for `db` if it is the active account's partition, waiting at most `FIRST_PULL.waitMs`
+ * (the round carries on in the background). Never throws.
+ */
 async function firstPull(db: AtelierDB): Promise<void> {
   try {
     const account = await getAccount();
     if (!account || `atelier-${account.partition}` !== db.name) return;
-    await syncOnce(db, account, new ApiClient(account.serverUrl, account.token));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      syncOnce(db, account, new ApiClient(account.serverUrl, account.token)),
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, FIRST_PULL.waitMs); }),
+    ]).finally(() => clearTimeout(timer));
   } catch (e) {
     console.error(e);
   }

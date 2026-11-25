@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
 import { LOCAL_USER } from '../data/db';
 import { sha256Hex } from './sha256';
 
 export type Account = { serverUrl: string; userId: string; email: string; displayName: string; token: string; partition: string };
 
-const KEY = 'account';
+/** `chrome.storage.local` key of the signed-in account. */
+export const ACCOUNT_KEY = 'account';
+const KEY = ACCOUNT_KEY;
 export const LOCAL_PARTITION = 'local';
 
 export async function getAccount(): Promise<Account | null> {
@@ -28,18 +29,3 @@ export function partitionFor(serverUrl: string, userId: string): string {
 let activeUserId: string = LOCAL_USER;
 export const currentUserId = (): string => activeUserId;
 export const setCurrentUserId = (id: string | null | undefined): void => { activeUserId = id ?? LOCAL_USER; };
-
-/** The active account: undefined while loading, null when signed out. Live on storage changes. */
-export function useAccount(): Account | null | undefined {
-  const [account, setLocal] = useState<Account | null | undefined>(undefined);
-  useEffect(() => {
-    let live = true;
-    void getAccount().then((a) => live && setLocal(a));
-    const onChanged = (changes: Record<string, { newValue?: unknown }>, area: string) => {
-      if (area === 'local' && KEY in changes) setLocal((changes[KEY]!.newValue as Account | undefined) ?? null);
-    };
-    chrome.storage.onChanged.addListener(onChanged as never);
-    return () => { live = false; chrome.storage.onChanged.removeListener(onChanged as never); };
-  }, []);
-  return account;
-}

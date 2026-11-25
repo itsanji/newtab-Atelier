@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Category, Workspace } from '@atelier/core';
 import type { AtelierDB } from '../data/db';
 import { DbProvider, useDb } from '../data/DbContext';
-import { ActiveDbProvider } from '../account/activeDb';
+import { ActiveDbProvider } from '../account/ActiveDbProvider';
 import { getMeta, liveCategories, liveWorkspaces, setMeta } from '../data/queries';
 import { createCategory, createItem } from '../data/repo';
 import { useTheme } from '../data/settings';
@@ -21,6 +21,8 @@ import { Icon } from '../ui/components/Icon';
 interface Loaded {
   tab: chrome.tabs.Tab | undefined;
   workspace: Workspace;
+  /** False when every workspace is read-only for this user. */
+  canSave: boolean;
   categories: Category[];
   selectedId: string | undefined;
   windowTabs: number;
@@ -46,7 +48,7 @@ async function load(db: AtelierDB): Promise<Loaded> {
   const tab = await currentTab();
   const stored = (await chrome.storage.local.get('closeAfterSave')).closeAfterSave;
   return {
-    tab, workspace, categories,
+    tab, workspace, canSave, categories,
     selectedId: categories.find((c) => c.id === last)?.id ?? categories[0]?.id,
     windowTabs: canSave ? (await listWindowTabs(tab?.windowId)).length : 0,
     closeAfterSave: typeof stored === 'boolean' ? stored : true,
@@ -147,7 +149,7 @@ function PopupBody({ initial }: { initial: Loaded }) {
               {c.name}
             </button>
           ))}
-          {!adding && (
+          {initial.canSave && !adding && (
             <button type="button" role="radio" aria-checked={false} className="atl-chip atl-chip-new" onClick={() => setAdding(true)}>
               + New
             </button>

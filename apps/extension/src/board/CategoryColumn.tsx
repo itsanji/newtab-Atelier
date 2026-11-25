@@ -16,7 +16,7 @@ import { IconButton } from '../ui/components/IconButton';
 import { EmojiPicker } from './EmojiPicker';
 import { useNotify, useRun } from './Notice';
 import { useCanEdit, useCurrentRole, VIEW_ONLY } from './useRole';
-import { useAccount } from '../account/account';
+import { useAccount } from '../account/useAccount';
 import { ApiClient } from '../sync/api';
 import { syncNow } from '../sync/localWrites';
 import { AddItemMenu } from './AddItemMenu';

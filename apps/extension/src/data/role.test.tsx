@@ -59,6 +59,7 @@ describe('save targets skip viewer workspaces', () => {
     expect(await screen.findByText('Save to · Mine')).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Ours' })).toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: 'Theirs' })).toBeNull();
+    expect(screen.getByRole('radio', { name: '+ New' })).toBeInTheDocument();
   });
   test('popup with only viewer workspaces cannot save', async () => {
     await db.members.put({ id: 'm2', workspaceId: 'rw', userId: 'u1', role: 'viewer', email: 'u1@x.io' });
@@ -66,5 +67,6 @@ describe('save targets skip viewer workspaces', () => {
     render(<Popup db={db} />);
     expect(await screen.findByRole('button', { name: 'Save tab' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /Save all/ })).toBeNull();
+    expect(screen.queryByRole('radio', { name: '+ New' })).toBeNull();
   });
 });

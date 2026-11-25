@@ -3,15 +3,19 @@ import { enqueue, outboxKey, type AtelierDB, type Member, type OutboxEntry } fro
 import { appendKey, clock } from '../data/repo';
 import { getMeta, liveCategories, liveItems, liveWorkspaces } from '../data/queries';
 import { currentUserId, type Account } from '../account/account';
-import { ApiError, OfflineError, UnauthorizedError, type ApiClient, type Change, type PullResponse } from './api';
+import { ApiError, OfflineError, UnauthorizedError, type ApiClient, type Change, type PullResponse, type PushResult } from './api';
 import { withLock } from './lock';
-import { addRecovered, setSyncStatus, type SyncState } from './status';
+import { addRecovered, addUnsyncable, setSyncStatus, type SyncState } from './status';
 
 /** The part of the API client the engine needs (tests pass a fake). */
 export type SyncApi = Pick<ApiClient, 'push' | 'pull'>;
 
 export const CURSOR_KEY = 'syncCursor';
 export const PUSH_CHUNK = 500;
+/** Serialized size cap per push request (the server refuses bodies over 5 MB with 413). */
+export const PUSH_MAX_BYTES = 4 * 1024 * 1024;
+/** Meta key: outbox versions the server refused as too large (413 on their own). Not pushed again until edited. */
+export const UNSYNCABLE_KEY = 'unsyncable';
 export const RECOVERED_NAME = 'Recovered';
 
 const TABLES: TableName[] = ['workspaces', 'categories', 'items', 'reminders'];
@@ -26,6 +30,14 @@ export interface PushSummary {
   /** Rejected items copied into "Recovered". */
   recovered: number;
   remindersChanged: boolean;
+  /** Titles of rows newly found too large to sync (they stay local, still in the outbox). */
+  unsyncable: string[];
+}
+
+export interface UnsyncableEntry {
+  key: string;
+  seq: number;
+  title: string;
 }
 
 export interface SyncResult extends PushSummary {
@@ -38,14 +50,66 @@ export interface SyncResult extends PushSummary {
 
 const syncTables = (db: AtelierDB) => [db.workspaces, db.categories, db.items, db.reminders, db.outbox, db.members, db.meta];
 
-const emptySummary = (): PushSummary => ({ pushed: 0, restored: 0, rejected: 0, recovered: 0, remindersChanged: false });
+const emptySummary = (): PushSummary => ({ pushed: 0, restored: 0, rejected: 0, recovered: 0, remindersChanged: false, unsyncable: [] });
 
-function addSummary(into: PushSummary, s: PushSummary): void {
-  into.pushed += s.pushed;
-  into.restored += s.restored;
-  into.rejected += s.rejected;
-  into.recovered += s.recovered;
-  into.remindersChanged ||= s.remindersChanged;
+const getUnsyncable = async (db: AtelierDB) => (await getMeta<UnsyncableEntry[]>(db, UNSYNCABLE_KEY)) ?? [];
+
+/**
+ * Outbox entries to push: all but versions already refused as too large. Also forgets refusals whose
+ * entry is gone or was rewritten (a new version gets its own try).
+ */
+export async function pushableEntries(db: AtelierDB): Promise<OutboxEntry[]> {
+  return db.transaction('rw', db.outbox, db.meta, async () => {
+    const entries = await db.outbox.toArray();
+    const stuck = await getUnsyncable(db);
+    const live = stuck.filter((s) => entries.some((e) => e.key === s.key && e.seq === s.seq));
+    if (live.length !== stuck.length) await db.meta.put({ key: UNSYNCABLE_KEY, value: live });
+    return entries.filter((e) => !live.some((s) => s.key === e.key && s.seq === e.seq));
+  });
+}
+
+const utf8 = new TextEncoder();
+const changeBytes = (e: OutboxEntry) => utf8.encode(JSON.stringify({ table: e.table, row: e.row })).length + 1;
+
+/** Split into push requests of at most PUSH_CHUNK rows and PUSH_MAX_BYTES (a bigger row goes alone). */
+export function chunkEntries(entries: OutboxEntry[]): OutboxEntry[][] {
+  const chunks: OutboxEntry[][] = [];
+  let cur: OutboxEntry[] = [];
+  let bytes = 0;
+  for (const e of entries) {
+    const size = changeBytes(e);
+    if (cur.length && (cur.length >= PUSH_CHUNK || bytes + size > PUSH_MAX_BYTES)) {
+      chunks.push(cur);
+      cur = [];
+      bytes = 0;
+    }
+    cur.push(e);
+    bytes += size;
+  }
+  if (cur.length) chunks.push(cur);
+  return chunks;
+}
+
+const nonEmpty = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+
+/** How to name a row in a notice. */
+export function rowTitle(entry: Pick<OutboxEntry, 'table' | 'row'>): string {
+  const row = entry.row as { title?: unknown; name?: unknown; kind?: unknown };
+  const named = nonEmpty(row.title) ?? nonEmpty(row.name);
+  if (named) return `“${named.length > 60 ? `${named.slice(0, 59)}…` : named}”`;
+  if (entry.table === 'items') return row.kind === 'note' ? 'A note' : row.kind === 'todo' ? 'A to-do' : 'A link';
+  return { workspaces: 'A workspace', categories: 'A category', reminders: 'A reminder' }[entry.table];
+}
+
+/** Remember that this version of a row is too large to sync. False if it was rewritten meanwhile. */
+async function markUnsyncable(db: AtelierDB, entry: OutboxEntry): Promise<boolean> {
+  return db.transaction('rw', db.outbox, db.meta, async () => {
+    if ((await db.outbox.get(entry.key))?.seq !== entry.seq) return false;
+    const stuck = (await getUnsyncable(db)).filter((s) => s.key !== entry.key);
+    stuck.push({ key: entry.key, seq: entry.seq, title: rowTitle(entry) });
+    await db.meta.put({ key: UNSYNCABLE_KEY, value: stuck });
+    return true;
+  });
 }
 
 /**
@@ -55,39 +119,64 @@ function addSummary(into: PushSummary, s: PushSummary): void {
 export async function pushOutbox(
   db: AtelierDB, api: SyncApi, userId: string = currentUserId(), now: () => Iso = clock.now,
 ): Promise<PushSummary> {
-  const entries = (await db.outbox.toArray()).sort((a, b) => RANK[a.table] - RANK[b.table] || a.seq - b.seq);
   const summary = emptySummary();
-  for (let i = 0; i < entries.length; i += PUSH_CHUNK) {
-    const chunk = entries.slice(i, i + PUSH_CHUNK);
-    const { results } = await api.push(chunk.map((e) => ({ table: e.table, row: e.row })));
-    if (!Array.isArray(results) || results.length !== chunk.length || results.some((r, j) => r?.id !== chunk[j]!.rowId)) {
-      throw new ApiError(502, 'Unexpected push response');
-    }
-    await db.transaction('rw', syncTables(db), async () => {
-      const rejected: Change[] = [];
-      for (const [j, entry] of chunk.entries()) {
-        const status = results[j]!.status;
-        const unchanged = (await db.outbox.get(entry.key))?.seq === entry.seq;
-        if (status === 'rejected') {
-          // A newer local version is queued: it gets its own verdict on the next push.
-          if (unchanged) rejected.push({ table: entry.table, row: entry.row });
-          continue;
-        }
-        summary.pushed++;
-        if (unchanged) await db.outbox.delete(entry.key);
-        if (status === 'restored') {
-          summary.restored++;
-          await markRestored(db, entry, unchanged);
-        }
-      }
-      if (rejected.length) {
-        summary.rejected += rejected.length;
-        summary.remindersChanged ||= rejected.some((c) => c.table === 'reminders');
-        summary.recovered += await recover(db, rejected, userId, now);
-      }
-    });
-  }
+  await pushInto(db, api, userId, now, summary);
   return summary;
+}
+
+/** `pushOutbox`, adding to `summary` as it goes (so a later chunk's failure keeps what earlier ones did). */
+async function pushInto(db: AtelierDB, api: SyncApi, userId: string, now: () => Iso, summary: PushSummary): Promise<void> {
+  const entries = (await pushableEntries(db)).sort((a, b) => RANK[a.table] - RANK[b.table] || a.seq - b.seq);
+  for (const chunk of chunkEntries(entries)) await pushChunk(db, api, chunk, userId, now, summary);
+}
+
+/**
+ * Push one chunk. A 413 (body too large) splits it in half and retries each half; a single row that
+ * still gets 413 is kept locally and in the outbox but marked unsyncable, so it no longer blocks pushes.
+ */
+async function pushChunk(
+  db: AtelierDB, api: SyncApi, chunk: OutboxEntry[], userId: string, now: () => Iso, summary: PushSummary,
+): Promise<void> {
+  let results: PushResult[];
+  try {
+    ({ results } = await api.push(chunk.map((e) => ({ table: e.table, row: e.row }))));
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 413) throw e;
+    if (chunk.length > 1) {
+      const mid = Math.ceil(chunk.length / 2);
+      await pushChunk(db, api, chunk.slice(0, mid), userId, now, summary);
+      await pushChunk(db, api, chunk.slice(mid), userId, now, summary);
+    } else if (await markUnsyncable(db, chunk[0]!)) {
+      summary.unsyncable.push(rowTitle(chunk[0]!));
+    }
+    return;
+  }
+  if (!Array.isArray(results) || results.length !== chunk.length || results.some((r, j) => r?.id !== chunk[j]!.rowId)) {
+    throw new ApiError(502, 'Unexpected push response');
+  }
+  await db.transaction('rw', syncTables(db), async () => {
+    const rejected: Change[] = [];
+    for (const [j, entry] of chunk.entries()) {
+      const status = results[j]!.status;
+      const unchanged = (await db.outbox.get(entry.key))?.seq === entry.seq;
+      if (status === 'rejected') {
+        // A newer local version is queued: it gets its own verdict on the next push.
+        if (unchanged) rejected.push({ table: entry.table, row: entry.row });
+        continue;
+      }
+      summary.pushed++;
+      if (unchanged) await db.outbox.delete(entry.key);
+      if (status === 'restored') {
+        summary.restored++;
+        await markRestored(db, entry, unchanged);
+      }
+    }
+    if (rejected.length) {
+      summary.rejected += rejected.length;
+      summary.remindersChanged ||= rejected.some((c) => c.table === 'reminders');
+      summary.recovered += await recover(db, rejected, userId, now);
+    }
+  });
 }
 
 /** The server put a row back under a parent another device deleted: mirror that locally, without enqueueing. */
@@ -337,16 +426,25 @@ async function runSync(db: AtelierDB, account: Account, api: SyncApi, now: () =>
   const result: SyncResult = { ok: true, state: 'idle', pulled: 0, ...emptySummary() };
   await status(account.partition, 'syncing');
   try {
-    addSummary(result, await pushOutbox(db, api, account.userId, now));
+    // A failed push (other than signed out / offline) must not stop this device receiving changes:
+    // pull anyway (rows still queued here are skipped by the pull) and report the push error after.
+    let pushError: unknown;
+    try {
+      await pushInto(db, api, account.userId, now, result);
+    } catch (e) {
+      if (e instanceof UnauthorizedError || e instanceof OfflineError) throw e;
+      pushError = e;
+    }
     const cursor = Number((await getMeta<number>(db, CURSOR_KEY)) ?? 0) || 0;
     const pulled = await applyPull(db, await api.pull(cursor));
     result.pulled = pulled.pulled;
     result.remindersChanged ||= pulled.remindersChanged;
-    if ((await db.outbox.count()) > 0) {
-      const again = await pushOutbox(db, api, account.userId, now);
-      addSummary(result, again);
+    if (pushError) throw pushError;
+    if ((await pushableEntries(db)).length > 0) {
+      const before = result.recovered;
+      await pushInto(db, api, account.userId, now, result);
       // That push may have queued Recovered copies (e.g. edits in a workspace the pull just removed): send them too.
-      if (again.recovered > 0) addSummary(result, await pushOutbox(db, api, account.userId, now));
+      if (result.recovered > before) await pushInto(db, api, account.userId, now, result);
     }
   } catch (e) {
     result.ok = false;
@@ -357,6 +455,13 @@ async function runSync(db: AtelierDB, account: Account, api: SyncApi, now: () =>
   if (result.recovered > 0) {
     try {
       await addRecovered(account.partition, result.recovered);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  if (result.unsyncable.length) {
+    try {
+      await addUnsyncable(account.partition, result.unsyncable);
     } catch (e) {
       console.error(e);
     }

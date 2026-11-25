@@ -2,7 +2,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Role } from '../sync/api';
 import { roleFrom } from '../data/role';
-import { useAccount } from '../account/account';
+import { useAccount } from '../account/useAccount';
 import { useDb } from '../data/DbContext';
 
 export type { Role };

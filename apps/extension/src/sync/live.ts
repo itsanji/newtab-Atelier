@@ -10,7 +10,8 @@ export const UNAUTHORIZED_CLOSE = 4401;
 const syncNow = () => void Promise.resolve(chrome.runtime.sendMessage({ type: 'sync-now' })).catch(() => undefined);
 
 /**
- * Hold the live WebSocket for a signed-in board page: `changed` triggers a sync. Reconnects with
+ * Hold the live WebSocket for a signed-in board page: `changed`, and `ready` after a reconnect, trigger
+ * a sync. Reconnects with
  * backoff (1 s doubling to 30 s); a 4401 close marks sync paused and stops. Closed on unmount.
  */
 export function useLiveSync(account: Account | null | undefined): void {
@@ -29,6 +30,7 @@ export function useLiveSync(account: Account | null | undefined): void {
     let socket: WebSocket | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let delay = BACKOFF_START_MS;
+    let readyBefore = false;
 
     const connect = () => {
       clearTimeout(timer);
@@ -49,7 +51,12 @@ export function useLiveSync(account: Account | null | undefined): void {
         } catch {
           return;
         }
-        if (msg?.type === 'ready') delay = BACKOFF_START_MS;
+        if (msg?.type === 'ready') {
+          delay = BACKOFF_START_MS;
+          // Reconnected: changes made while the socket was down weren't announced.
+          if (readyBefore) syncNow();
+          readyBefore = true;
+        }
         else if (msg?.type === 'changed') syncNow();
       };
       ws.onclose = (ev) => {

@@ -63,6 +63,21 @@ describe('worker sync scheduling', () => {
     expect(syncOnce).toHaveBeenCalledTimes(1);
   });
 
+  test("skips the run when the account changes between reading it and opening the database", async () => {
+    await setAccount(acct);
+    const get = fake.storage.local.get;
+    const original = get.getMockImplementation()!;
+    // Sign-out lands right after syncActive reads the account.
+    get.mockImplementationOnce(async (keys) => {
+      const r = await original(keys);
+      await clearAccount();
+      return r;
+    });
+    fake.runtime.onMessage.dispatch({ type: 'sync-now' }, {}, () => {});
+    await settle();
+    expect(syncOnce).not.toHaveBeenCalled();
+  });
+
   test('a sync that changed reminders re-syncs alarms', async () => {
     await setAccount(acct);
     vi.mocked(syncOnce).mockResolvedValueOnce({ ok: true, state: 'idle', remindersChanged: true } as never);

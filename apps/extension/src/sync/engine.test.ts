@@ -6,9 +6,9 @@ import { openDb, outboxKey, type AtelierDB } from '../data/db';
 import { clock, createCategory, createItem, createWorkspace, setReminder, updateItem } from '../data/repo';
 import { liveCategories, liveItems } from '../data/queries';
 import { partitionFor, setCurrentUserId, type Account } from '../account/account';
-import { OfflineError, UnauthorizedError, type Change, type PullResponse, type PushResult } from './api';
-import { applyPull, pushOutbox, recover, syncOnce, type SyncApi } from './engine';
-import { getSyncStatus, takeRecovered } from './status';
+import { ApiError, OfflineError, UnauthorizedError, type Change, type PullResponse, type PushResult } from './api';
+import { applyPull, PUSH_MAX_BYTES, pushOutbox, recover, syncOnce, UNSYNCABLE_KEY, type SyncApi } from './engine';
+import { getSyncStatus, takeRecovered, takeUnsyncable } from './status';
 
 const USER = 'user-1';
 let db: AtelierDB;
@@ -71,6 +71,19 @@ const serverItem = (id: string, categoryId: string, extra: Partial<Item> = {}): 
   ...row, id, categoryId, kind: 'link', sortKey: 'a0', title: 'Server item', url: 'https://s.example/x',
   faviconUrl: null, note: null, body: null, done: false, restored: false, ...extra,
 });
+
+/** A fake server that answers 413 to any push whose JSON body is over `limit` bytes. */
+function sizeLimitedApi(limit: number, opts: Parameters<typeof fakeApi>[0] = {}) {
+  const f = fakeApi(opts);
+  const push = f.api.push.getMockImplementation()!;
+  const sizes: number[] = [];
+  f.api.push.mockImplementation(async (changes: Change[]) => {
+    sizes.push(changes.length);
+    if (new TextEncoder().encode(JSON.stringify({ changes })).length > limit) throw new ApiError(413, 'Payload too large');
+    return push(changes);
+  });
+  return { ...f, sizes };
+}
 
 describe('pushOutbox', () => {
   test('push orders by table then seq', async () => {
@@ -172,6 +185,54 @@ describe('pushOutbox', () => {
     }));
     await expect(pushOutbox(db, api)).rejects.toThrow('Unexpected push response');
     expect(await db.outbox.count()).toBe(before);
+  });
+
+  test('chunks by serialized size, not only by count', async () => {
+    const { cat } = await setup();
+    await db.outbox.clear();
+    const big = 'x'.repeat(Math.floor(PUSH_MAX_BYTES / 3));
+    for (let i = 0; i < 4; i++) await createItem(db, { categoryId: cat.id, kind: 'note', title: `n${i}`, note: big });
+    const { api, pushes } = fakeApi();
+    await pushOutbox(db, api);
+    expect(pushes.map((p) => p.length)).toEqual([2, 2]);
+    expect(await db.outbox.count()).toBe(0);
+  });
+
+  test('a 413 on a 2-row chunk splits it and pushes each row', async () => {
+    const { cat } = await setup();
+    await db.outbox.clear();
+    const a = await createItem(db, { categoryId: cat.id, kind: 'note', title: 'a', note: 'y'.repeat(3000) });
+    const b = await createItem(db, { categoryId: cat.id, kind: 'note', title: 'b', note: 'y'.repeat(3000) });
+    const { api, pushes, sizes } = sizeLimitedApi(4000);
+    const r = await pushOutbox(db, api);
+    expect(sizes).toEqual([2, 1, 1]);
+    expect(pushes.map((p) => p.map((c) => (c.row as Item).id))).toEqual([[a.id], [b.id]]);
+    expect(r).toMatchObject({ pushed: 2, unsyncable: [] });
+    expect(await db.outbox.count()).toBe(0);
+  });
+
+  test('a single row that still gets 413 stays local, is marked unsyncable and stops blocking pushes', async () => {
+    const { cat } = await setup();
+    await db.outbox.clear();
+    const huge = await createItem(db, { categoryId: cat.id, kind: 'note', title: 'Huge note', note: 'z'.repeat(5000) });
+    const small = await createItem(db, { categoryId: cat.id, kind: 'todo', title: 'small' });
+    const { api, pushes, sizes } = sizeLimitedApi(4000);
+    const r = await pushOutbox(db, api);
+    expect(r.unsyncable).toEqual(['“Huge note”']);
+    expect(pushes.map((p) => p.map((c) => (c.row as Item).id))).toEqual([[small.id]]);
+    expect(await db.items.get(huge.id)).toBeDefined();
+    expect((await db.outbox.toArray()).map((e) => e.rowId)).toEqual([huge.id]);
+    expect(((await db.meta.get(UNSYNCABLE_KEY))!.value as Array<{ key: string }>).map((u) => u.key)).toEqual([outboxKey('items', huge.id)]);
+    // The next push leaves it out entirely.
+    sizes.length = 0;
+    const again = await pushOutbox(db, api);
+    expect(sizes).toEqual([]);
+    expect(again.unsyncable).toEqual([]);
+    // Once edited small enough, it is pushed again.
+    await updateItem(db, huge.id, { note: 'short now' });
+    await pushOutbox(db, api);
+    expect(await db.outbox.count()).toBe(0);
+    expect(await db.meta.get(UNSYNCABLE_KEY)).toMatchObject({ value: [] });
   });
 
   test('push failure keeps outbox', async () => {
@@ -362,6 +423,41 @@ describe('syncOnce', () => {
     expect(r).toMatchObject({ ok: false, state: 'offline' });
     expect(await db.outbox.count()).toBe(before);
     expect((await getSyncStatus())!.state).toBe('offline');
+  });
+
+  test('a push 5xx still pulls, keeps the outbox and reports error; the next round retries', async () => {
+    await setup();
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const before = await db.outbox.count();
+    const { api, pushes } = fakeApi({ pull: (c) => emptyPull(c + 1) });
+    const push = api.push.getMockImplementation()!;
+    api.push.mockRejectedValueOnce(new ApiError(503, 'Service unavailable'));
+    const r = await syncOnce(db, account, api);
+    expect(r).toMatchObject({ ok: false, state: 'error', error: 'Service unavailable' });
+    expect(api.pull).toHaveBeenCalledTimes(1);
+    expect((await db.meta.get('syncCursor'))!.value).toBe(1);
+    expect(await db.outbox.count()).toBe(before);
+    expect((await getSyncStatus())!.state).toBe('error');
+    api.push.mockImplementation(push);
+    const next = await syncOnce(db, account, api);
+    expect(next).toMatchObject({ ok: true, state: 'idle' });
+    expect(pushes).toHaveLength(1);
+    expect(await db.outbox.count()).toBe(0);
+    err.mockRestore();
+  });
+
+  test('a row too large to sync is reported once, and sync goes on', async () => {
+    const { cat } = await setup();
+    const huge = await createItem(db, { categoryId: cat.id, kind: 'note', title: 'Huge note', note: 'z'.repeat(5000) });
+    const { api } = sizeLimitedApi(4000, { pull: (c) => emptyPull(c + 1) });
+    const r = await syncOnce(db, account, api);
+    expect(r).toMatchObject({ ok: true, state: 'idle', unsyncable: ['“Huge note”'] });
+    expect(api.pull).toHaveBeenCalledTimes(1);
+    expect((await db.outbox.toArray()).map((e) => e.rowId)).toEqual([huge.id]);
+    expect(await takeUnsyncable(account.partition)).toEqual(['“Huge note”']);
+    const again = await syncOnce(db, account, api);
+    expect(again).toMatchObject({ ok: true, unsyncable: [] });
+    expect(await takeUnsyncable(account.partition)).toEqual([]);
   });
 
   test('401 pauses sync', async () => {

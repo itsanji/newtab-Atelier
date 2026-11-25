@@ -10,6 +10,7 @@ export interface SyncStatus {
 
 export const STATUS_KEY = 'syncStatus';
 export const RECOVERED_KEY = 'syncRecovered';
+export const UNSYNCABLE_NOTICE_KEY = 'syncUnsyncable';
 
 // `chrome.storage.session` is missing outside the extension (and in some tests): status is then not shared.
 const area = (): chrome.storage.StorageArea | undefined =>
@@ -47,3 +48,27 @@ export async function takeRecovered(partition: string): Promise<number> {
 
 export const recoveredNotice = (count: number): string =>
   `${count} ${count === 1 ? "item couldn't" : "items couldn't"} sync and ${count === 1 ? 'was' : 'were'} saved to Recovered`;
+
+/** Queue notices for rows found too large to sync (by title). */
+export async function addUnsyncable(partition: string, titles: string[]): Promise<void> {
+  const s = area();
+  if (!s || !titles.length) return;
+  const cur = (await s.get(UNSYNCABLE_NOTICE_KEY))[UNSYNCABLE_NOTICE_KEY] as { partition: string; titles: string[] } | undefined;
+  const prev = cur?.partition === partition ? cur.titles : [];
+  await s.set({ [UNSYNCABLE_NOTICE_KEY]: { partition, titles: [...prev, ...titles] } });
+}
+
+/** Read and reset the pending "too large to sync" titles for a partition. */
+export async function takeUnsyncable(partition: string): Promise<string[]> {
+  const s = area();
+  if (!s) return [];
+  const cur = (await s.get(UNSYNCABLE_NOTICE_KEY))[UNSYNCABLE_NOTICE_KEY] as { partition: string; titles: string[] } | undefined;
+  if (!cur || cur.partition !== partition) return [];
+  await s.remove(UNSYNCABLE_NOTICE_KEY);
+  return cur.titles;
+}
+
+export const unsyncableNotice = (titles: string[]): string =>
+  titles.length === 1
+    ? `${titles[0]} is too large to sync and stays on this device`
+    : `${titles.length} items are too large to sync and stay on this device`;
