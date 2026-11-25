@@ -1,4 +1,4 @@
-import { useState, type WheelEvent } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Workspace } from '@atelier/core';
@@ -14,21 +14,22 @@ import { useNewCategoryDrop } from './dnd';
 import { useCanEdit, VIEW_ONLY } from './useRole';
 
 /**
- * The board scrolls sideways (its scrollbar is hidden). A plain wheel moves it sideways too, so a mouse
- * without a horizontal wheel reaches every column: over a column's items only once they can't scroll any
- * further that way, anywhere else on the board at once.
+ * The board scrolls sideways (its scrollbar is hidden) with Shift+wheel, from anywhere on it, columns
+ * included; a plain wheel only ever scrolls up and down. A trackpad's sideways swipe (deltaX) is left to
+ * the browser. Registered as a non-passive listener so the page doesn't also scroll.
  */
-function wheelSideways(e: WheelEvent<HTMLDivElement>) {
-  if (e.deltaX !== 0 || e.shiftKey || e.ctrlKey || e.deltaY === 0) return;
-  const target = e.target as Element;
-  // Inside a menu, a picker or a text field the wheel stays theirs.
-  if (target.closest('[role="menu"], [role="dialog"], textarea, .ProseMirror')) return;
-  const list = target.closest('.atl-column-body');
-  if (list) {
-    const room = e.deltaY > 0 ? list.scrollHeight - list.clientHeight - list.scrollTop : list.scrollTop;
-    if (room > 1) return;
-  }
-  e.currentTarget.scrollLeft += e.deltaY;
+function useShiftWheelSideways(board: RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const el = board.current;
+    if (!el) return;
+    const onWheel = (e: globalThis.WheelEvent) => {
+      if (!e.shiftKey || e.ctrlKey || e.deltaX !== 0 || e.deltaY === 0) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [board]);
 }
 
 export function Board({ workspace }: { workspace: Workspace }) {
@@ -38,9 +39,11 @@ export function Board({ workspace }: { workspace: Workspace }) {
   const [adding, setAdding] = useState(false);
   const canEdit = useCanEdit();
   const drop = useNewCategoryDrop(workspace.id, !canEdit);
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  useShiftWheelSideways(boardRef);
 
   return (
-    <div className="atl-board" data-popover-bounds onWheel={wheelSideways}>
+    <div className="atl-board" data-popover-bounds ref={boardRef}>
       <SortableContext items={categories.map((c) => c.id)} strategy={rectSortingStrategy}>
         {categories.map((c) => <CategoryColumn key={c.id} category={c} onOpenAll={() => void run(openAll(db, c.id))} />)}
       </SortableContext>

@@ -183,17 +183,27 @@ test('long content never makes the page scroll sideways', async () => {
     await page.keyboard.press('Escape');
   }
 
-  // Many columns: the board scrolls sideways inside itself, a wheel over a gap moves it, and the page stays put.
+  // Many columns: the board scrolls sideways inside itself, only with Shift+wheel, and the page stays put.
   await page.setViewportSize({ width: 1024, height: 700 });
   const board = page.locator('.atl-board');
   const sizes = await board.evaluate((b) => ({ scroll: b.scrollWidth, client: b.clientWidth }));
   expect(sizes.scroll, 'board holds more columns than fit').toBeGreaterThan(sizes.client);
-  const gap = await page.evaluate(() => {
+  const spots = await page.evaluate(() => {
     const [a, b] = Array.from(document.querySelectorAll('.atl-column')).map((c) => c.getBoundingClientRect());
-    return { x: (a!.right + b!.left) / 2, y: a!.top + 10 };
+    return { gap: { x: (a!.right + b!.left) / 2, y: a!.top + 10 }, column: { x: a!.left + a!.width / 2, y: a!.top + 120 } };
   });
-  await page.mouse.move(gap.x, gap.y);
+  // A plain wheel never moves the board sideways, over a gap or over a column.
+  for (const spot of [spots.gap, spots.column]) {
+    await page.mouse.move(spot.x, spot.y);
+    await page.mouse.wheel(0, 400);
+  }
+  await page.waitForTimeout(300);
+  expect(await board.evaluate((b) => b.scrollLeft), 'a plain wheel scrolled sideways').toBe(0);
+  // Shift+wheel does, even over a column.
+  await page.mouse.move(spots.column.x, spots.column.y);
+  await page.keyboard.down('Shift');
   await page.mouse.wheel(0, 400);
+  await page.keyboard.up('Shift');
   await expect.poll(() => board.evaluate((b) => b.scrollLeft)).toBeGreaterThan(0);
   // Wide windows fit the page to the window: columns scroll their own items instead of growing the page.
   const tall = await page.evaluate(() => ({
