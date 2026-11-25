@@ -127,6 +127,7 @@ async function signUpViaApi(user: { name: string; email: string }) {
 
 /** Connect to the test server from the sidebar and sign in (or create the account). */
 async function connect(board: Page, user: { name: string; email: string }, mode: 'signin' | 'signup') {
+  await board.locator('.atl-sidebar').hover({ position: { x: 20, y: 300 } });
   await board.getByRole('button', { name: 'Connect a server' }).click();
   const connectDialog = board.getByRole('dialog', { name: 'Connect a server' });
   await connectDialog.getByLabel('Server address').fill(serverUrl);
@@ -142,6 +143,7 @@ async function connect(board: Page, user: { name: string; email: string }, mode:
   await dialog.getByLabel('Password').fill(PASSWORD);
   await dialog.getByRole('button', { name: mode === 'signup' ? 'Create account' : 'Sign in' }).click();
   await expect(dialog).toBeHidden();
+  await board.locator('.atl-sidebar').hover({ position: { x: 20, y: 300 } });
   await expect(board.getByRole('button', { name: user.name })).toBeVisible();
 }
 
@@ -174,6 +176,7 @@ test.afterEach(async ({}, info) => {
 
 test('device A creates an account and saves a tab', async () => {
   await connect(a.board, A, 'signup');
+  await a.board.locator('.atl-sidebar').hover({ position: { x: 20, y: 300 } });
   await expect(a.board.getByRole('status').filter({ hasText: 'Synced' })).toBeVisible();
 
   // A workspace name both devices and the invited viewer can find.
@@ -200,6 +203,7 @@ test('device A creates an account and saves a tab', async () => {
 
   await a.board.bringToFront();
   await expect(savedItem(a.board, 'Example Domain')).toBeVisible();
+  await a.board.locator('.atl-sidebar').hover({ position: { x: 20, y: 300 } });
   await expect(a.board.getByRole('status').filter({ hasText: 'Synced' })).toBeVisible();
 });
 
@@ -222,6 +226,8 @@ test('device B signs in to the same account, gets the link, then sees A\'s edits
 });
 
 test('a title edited on B shows up on A', async () => {
+  // Move off the sidebar, which opens over the first column while the mouse is on it.
+  await b.board.mouse.move(900, 600);
   const row = savedItem(b.board, 'Example Domain');
   await row.hover();
   await row.getByRole('button', { name: 'Link options' }).click();
@@ -270,8 +276,10 @@ test('a viewer invited by A sees the workspace read-only on B', async () => {
 
   // B signs out of A's account and in as C.
   await b.board.bringToFront();
+  await b.board.locator('.atl-sidebar').hover({ position: { x: 20, y: 300 } });
   await b.board.getByRole('button', { name: A.name }).click();
   await b.board.getByRole('dialog', { name: 'Account' }).getByRole('button', { name: 'Sign out' }).click();
+  await b.board.locator('.atl-sidebar').hover({ position: { x: 20, y: 300 } });
   await expect(b.board.getByRole('button', { name: 'Connect a server' })).toBeVisible();
   await expect(savedItem(b.board, 'Example, renamed on B')).toHaveCount(0);
 

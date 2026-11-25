@@ -48,7 +48,7 @@ async function openNewTab(): Promise<Page> {
 
 test('new tab shows the seeded workspace and categories', async () => {
   const page = await openNewTab();
-  await expect(page.getByText('My workspace').first()).toBeVisible({ timeout: 1000 });
+  await expect(page.getByRole('heading', { level: 1, name: 'My workspace' })).toBeVisible({ timeout: 1000 });
   await expect(page.getByRole('region', { name: 'Saved' })).toBeVisible({ timeout: 1000 });
   await expect(page.getByRole('region', { name: 'Notes' })).toBeVisible({ timeout: 1000 });
   await page.close();

@@ -1,6 +1,8 @@
 a { color: var(--lily); }
 .atl-shell { display: flex; flex-wrap: wrap; min-height: 100vh; background: var(--canvas); color: var(--ink); }
-.atl-sidebar { flex: 1 1 260px; min-width: 0; max-width: 100%; box-sizing: border-box; background: var(--canvas-sunk); padding: var(--space-6) var(--space-5); display: flex; flex-direction: column; gap: var(--space-6); }
+.atl-sidebar { flex: 1 1 260px; min-width: 0; max-width: 100%; box-sizing: border-box; background: var(--canvas-sunk); padding: var(--space-6) var(--space-5); }
+.atl-sidebar-inner { display: flex; flex-direction: column; gap: var(--space-6); }
+.atl-sidebar-rail { display: none; }
 .atl-brand { display: flex; flex-direction: column; gap: var(--space-2); }
 .atl-brand-name { font-family: var(--font-serif); font-size: 32px; line-height: 36px; font-weight: 500; }
 .atl-workspaces { display: flex; flex-direction: column; gap: var(--space-2); align-items: stretch; }
@@ -29,11 +31,25 @@ a { color: var(--lily); }
 .atl-column-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: var(--space-1); margin: 0 calc(-1 * var(--space-2)); padding: 2px var(--space-2); }
 .atl-column-head, .atl-column-foot { flex: none; }
 /* Quiet scrollbars in the theme's colours, light or dark. */
-.atl-board, .atl-column-body, .atl-sidebar, .atl-main { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.atl-column-body, .atl-sidebar, .atl-main { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+/* The board's sideways scrollbar is hidden: it scrolls by wheel, Shift+wheel, trackpad and keyboard. */
+.atl-board { scrollbar-width: none; }
+.atl-board::-webkit-scrollbar { display: none; }
 /* Wide windows: the page fits the window; the board fills the height under the header. */
 @media (min-width: 821px) {
-  .atl-shell { flex-wrap: nowrap; height: 100vh; min-height: 0; overflow: hidden; }
-  .atl-sidebar { overflow-y: auto; flex: 0 0 260px; }
+  .atl-shell { position: relative; flex-wrap: nowrap; height: 100vh; min-height: 0; overflow: hidden; padding-left: 44px; box-sizing: border-box; }
+  /* The sidebar rests as a 44px strip and opens over the board, without moving it, on hover or keyboard focus
+     (:focus-visible, so focus going back to a button after a mouse click doesn't hold it open). */
+  .atl-sidebar { position: absolute; inset: 0 auto 0 0; z-index: 30; width: 44px; overflow: hidden; padding: 0; transition: width var(--duration-quick) ease, box-shadow var(--duration-quick) ease; }
+  .atl-sidebar-inner { width: 260px; box-sizing: border-box; min-height: 100%; padding: var(--space-6) var(--space-5); display: flex; flex-direction: column; gap: var(--space-6); opacity: 0; visibility: hidden; transition: opacity var(--duration-quick) ease, visibility 0s linear var(--duration-quick); }
+  .atl-sidebar:hover, .atl-sidebar:has(:focus-visible) { width: 260px; overflow-y: auto; box-shadow: var(--shadow-lift); }
+  .atl-sidebar:hover .atl-sidebar-inner, .atl-sidebar:has(:focus-visible) .atl-sidebar-inner { opacity: 1; visibility: visible; transition: opacity var(--duration-quick) ease; }
+  .atl-sidebar-rail { position: absolute; top: var(--space-6); left: 0; width: 44px; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: opacity var(--duration-quick) ease; }
+  .atl-sidebar-rail span { width: 18px; height: 4px; border-radius: 2px; background: var(--lily); }
+  .atl-sidebar-rail span:nth-child(2) { background: var(--sage); }
+  .atl-sidebar-rail span:nth-child(3) { background: var(--rose); }
+  .atl-sidebar-rail span:nth-child(4) { background: var(--ochre); }
+  .atl-sidebar:hover .atl-sidebar-rail, .atl-sidebar:has(:focus-visible) .atl-sidebar-rail { opacity: 0; }
   .atl-main { min-height: 0; overflow-y: auto; }
   .atl-board { flex: 1 1 auto; min-height: 320px; }
   .atl-column { max-height: 100%; }

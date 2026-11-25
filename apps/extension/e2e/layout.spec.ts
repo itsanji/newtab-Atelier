@@ -117,6 +117,7 @@ test('long content never makes the page scroll sideways', async () => {
   expect(fit.title, 'column title squeezed').toBeGreaterThanOrEqual(48);
 
   // Workspace name
+  await page.locator('.atl-sidebar').hover({ position: { x: 20, y: 300 } });
   await page.getByRole('button', { name: 'Workspace options' }).first().click();
   await page.getByRole('menuitem', { name: 'Edit' }).click();
   await page.getByLabel('Name', { exact: true }).fill(LONG_WORKSPACE);

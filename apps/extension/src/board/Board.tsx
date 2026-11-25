@@ -14,12 +14,20 @@ import { useNewCategoryDrop } from './dnd';
 import { useCanEdit, VIEW_ONLY } from './useRole';
 
 /**
- * The board scrolls sideways. A plain wheel over the gaps between columns (not over a column, which scrolls
- * its own items) moves it sideways too, so a mouse without a horizontal wheel can reach every column.
+ * The board scrolls sideways (its scrollbar is hidden). A plain wheel moves it sideways too, so a mouse
+ * without a horizontal wheel reaches every column: over a column's items only once they can't scroll any
+ * further that way, anywhere else on the board at once.
  */
 function wheelSideways(e: WheelEvent<HTMLDivElement>) {
-  if (e.deltaX !== 0 || e.shiftKey || e.ctrlKey) return;
-  if ((e.target as Element).closest('.atl-column, .atl-newcat')) return;
+  if (e.deltaX !== 0 || e.shiftKey || e.ctrlKey || e.deltaY === 0) return;
+  const target = e.target as Element;
+  // Inside a menu, a picker or a text field the wheel stays theirs.
+  if (target.closest('[role="menu"], [role="dialog"], textarea, .ProseMirror')) return;
+  const list = target.closest('.atl-column-body');
+  if (list) {
+    const room = e.deltaY > 0 ? list.scrollHeight - list.clientHeight - list.scrollTop : list.scrollTop;
+    if (room > 1) return;
+  }
   e.currentTarget.scrollLeft += e.deltaY;
 }
 
