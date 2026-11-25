@@ -47,11 +47,25 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
       doc: { scroll: doc.scrollWidth, client: doc.clientWidth },
       board: board ? { scroll: board.scrollWidth, client: board.clientWidth } : null,
       columns: Array.from(document.querySelectorAll('.atl-column')).map((c) => c.getBoundingClientRect().width),
+      // Each column head stays on one row: its visible children share one vertical centre and stay inside it.
+      heads: Array.from(document.querySelectorAll('.atl-column-head')).map((h) => {
+        const r = h.getBoundingClientRect();
+        const kids = Array.from(h.children).map((k) => k.getBoundingClientRect()).filter((k) => k.width > 0);
+        return {
+          name: h.closest('.atl-column')?.getAttribute('aria-label') ?? '',
+          offRow: kids.length ? Math.max(...kids.map((k) => k.top + k.height / 2)) - Math.min(...kids.map((k) => k.top + k.height / 2)) : 0,
+          overflow: Math.max(0, ...kids.map((k) => k.right - r.right)),
+        };
+      }),
     };
   });
   expect(m.doc.scroll, `${label}: page scrolls sideways`).toBeLessThanOrEqual(m.doc.client);
   if (m.board) expect(m.board.scroll, `${label}: board scrolls sideways`).toBeLessThanOrEqual(m.board.client);
   for (const w of m.columns) expect(w, `${label}: column wider than 300px`).toBeLessThanOrEqual(301);
+  for (const h of m.heads) {
+    expect(h.offRow, `${label}: head of "${h.name}" wrapped onto a second row`).toBeLessThanOrEqual(2);
+    expect(h.overflow, `${label}: head of "${h.name}" spills out of its column`).toBeLessThanOrEqual(1);
+  }
 }
 
 /** The column whose right edge is furthest right (the one most likely to push a popover off-screen). */
@@ -71,6 +85,27 @@ test('long content never makes the board scroll sideways', async () => {
   await page.goto(`chrome-extension://${extensionId}/src/newtab/index.html`);
   const saved = page.getByRole('region', { name: 'Saved', exact: true });
   await expect(saved).toBeVisible();
+
+  // Worst-case column head: "Saved" with both the tab-group tag and the public tag. Written straight into
+  // IndexedDB (no server here), then reloaded so the board reads it.
+  await page.evaluate(() => new Promise<void>((resolve, reject) => {
+    const open = indexedDB.open('atelier-local');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const tx = open.result.transaction('categories', 'readwrite');
+      const store = tx.objectStore('categories');
+      const all = store.getAll();
+      all.onsuccess = () => {
+        const cat = (all.result as Array<{ name: string }>).find((c) => c.name === 'Saved')!;
+        store.put({ ...cat, shareToken: 'layout-test', tabGroup: { title: 'Research', color: 'blue' } });
+      };
+      tx.oncomplete = () => { open.result.close(); resolve(); };
+      tx.onerror = () => reject(tx.error);
+    };
+  }));
+  await page.reload();
+  await expect(saved.getByText('Public', { exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page, 'tagged column head at 1500px');
 
   // Workspace name
   await page.getByRole('button', { name: 'Workspace options' }).first().click();
