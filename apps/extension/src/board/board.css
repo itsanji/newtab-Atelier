@@ -27,10 +27,13 @@ a { color: var(--lily); }
 .atl-board { display: flex; flex-wrap: wrap; gap: var(--space-5); align-items: flex-start; min-width: 0; padding: var(--space-1) var(--space-1) var(--space-5); }
 .atl-column { flex: 0 0 300px; width: 300px; min-width: 0; max-width: 100%; box-sizing: border-box; background: var(--canvas-raised); border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); padding: 20px var(--space-4) var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); }
 /* Tags wrap below the title when a row has no room for them. */
-/* One row: the title takes what's left (two lines max) and tags shrink with an ellipsis, so nothing wraps or overflows. */
-.atl-column-head { display: flex; align-items: center; gap: var(--space-2); padding: 0 0 var(--space-2); min-width: 0; }
-.atl-column-head > .im-tag { display: block; flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.atl-column-title { flex: 1 1 auto; min-width: 3em; overflow-wrap: anywhere; margin: 0; font-family: var(--font-serif); font-size: 24px; line-height: 30px; font-weight: 600; }
+/* One row in a 300px column: compact grip/emoji buttons; the title gives way first (down to 2em, then two
+   lines); only the long "Tab group · N" tag may shorten with an ellipsis; the count and "Public" never do. */
+.atl-column-head { display: flex; align-items: center; gap: var(--space-1); padding: 0 0 var(--space-2); min-width: 0; }
+.atl-column-head .atl-grip, .atl-column-head .atl-emoji-btn, .atl-column-head .atl-icon { width: 28px; }
+.atl-column-head > .im-tag { display: block; flex: 0 0 auto; white-space: nowrap; }
+.atl-column-head > .im-tag-lily { flex: 0 1 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis; }
+.atl-column-title { flex: 1 1 auto; min-width: 2em; overflow-wrap: anywhere; margin: 0; font-family: var(--font-serif); font-size: 24px; line-height: 30px; font-weight: 600; }
 .atl-column-head .im-field { flex: 1 1 80px; min-width: 0; }
 /* Long names show two lines, then an ellipsis; the full name is in the title attribute. */
 .atl-title-btn { max-width: 100%; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font: inherit; color: inherit; background: transparent; border: 0; padding: 0; cursor: text; text-align: left; border-radius: var(--radius-sm); }

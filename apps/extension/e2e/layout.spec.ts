@@ -106,6 +106,13 @@ test('long content never makes the board scroll sideways', async () => {
   await page.reload();
   await expect(saved.getByText('Public', { exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page, 'tagged column head at 1500px');
+  // "Public" is never cut short, and the title keeps real room next to the tags.
+  const fit = await saved.evaluate((col) => {
+    const pub = Array.from(col.querySelectorAll('.atl-column-head > .im-tag')).find((t) => t.textContent === 'Public')!;
+    return { pubCut: pub.scrollWidth > pub.clientWidth, title: col.querySelector('.atl-column-title')!.getBoundingClientRect().width };
+  });
+  expect(fit.pubCut, '"Public" tag is truncated').toBe(false);
+  expect(fit.title, 'column title squeezed').toBeGreaterThanOrEqual(48);
 
   // Workspace name
   await page.getByRole('button', { name: 'Workspace options' }).first().click();
